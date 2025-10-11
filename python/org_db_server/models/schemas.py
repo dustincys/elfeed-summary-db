@@ -55,3 +55,25 @@ class IndexFileResponse(BaseModel):
     status: str
     headlines_count: int
     links_count: int
+
+class SemanticSearchRequest(BaseModel):
+    """Request for semantic search."""
+    query: str = Field(..., min_length=1, description="Search query text")
+    limit: int = Field(default=10, ge=1, le=100, description="Maximum number of results")
+    model: Optional[str] = Field(default=None, description="Embedding model to use (optional)")
+
+class SearchResult(BaseModel):
+    """Single search result."""
+    chunk_id: int
+    chunk_text: str
+    similarity_score: float
+    filename: str
+    chunk_type: str
+    begin_line: int
+    end_line: int
+
+class SemanticSearchResponse(BaseModel):
+    """Response from semantic search."""
+    results: List[SearchResult]
+    query: str
+    model_used: str

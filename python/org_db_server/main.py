@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from org_db_server.api import indexing
+from org_db_server.api import indexing, search
 
 app = FastAPI(title="org-db Server", version="0.1.0")
 
@@ -17,6 +17,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(indexing.router)
+app.include_router(search.router)
 
 @app.get("/health")
 async def health_check():
