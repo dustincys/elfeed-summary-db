@@ -283,26 +283,43 @@ async def headline_search(request: HeadlineSearchRequest):
     try:
         cursor = db.conn.cursor()
 
-        if request.query:
-            # Search headlines by title using LIKE
-            cursor.execute("""
-                SELECT h.title, f.filename, h.begin, h.level, h.tags, h.todo_keyword
-                FROM headlines h
-                JOIN files f ON h.filename_id = f.rowid
-                WHERE h.title LIKE ?
-                ORDER BY f.filename, h.begin
-                LIMIT ?
-            """, (f"%{request.query}%", request.limit))
-        else:
-            # Return all headlines
-            cursor.execute("""
-                SELECT h.title, f.filename, h.begin, h.level, h.tags, h.todo_keyword
-                FROM headlines h
-                JOIN files f ON h.filename_id = f.rowid
-                ORDER BY f.filename, h.begin
-                LIMIT ?
-            """, (request.limit,))
+        # Build base query
+        base_query = """
+            SELECT h.title, f.filename, h.begin, h.level, h.tags, h.todo_keyword
+            FROM headlines h
+            JOIN files f ON h.filename_id = f.rowid
+        """
 
+        params = []
+        where_clauses = []
+
+        # Add title search if query provided
+        if request.query:
+            where_clauses.append("h.title LIKE ?")
+            params.append(f"%{request.query}%")
+
+        # Add filename pattern filter if provided
+        if request.filename_pattern:
+            where_clauses.append("f.filename LIKE ?")
+            params.append(request.filename_pattern)
+
+        # Add keyword filter if provided
+        if request.keyword:
+            base_query += """
+                JOIN file_keywords fk ON f.rowid = fk.filename_id
+                JOIN keywords k ON fk.keyword_id = k.rowid
+            """
+            where_clauses.append("k.keyword = ?")
+            params.append(request.keyword)
+
+        # Combine WHERE clauses
+        if where_clauses:
+            base_query += " WHERE " + " AND ".join(where_clauses)
+
+        base_query += " ORDER BY f.filename, h.begin LIMIT ?"
+        params.append(request.limit)
+
+        cursor.execute(base_query, params)
         rows = cursor.fetchall()
 
         # Convert to result objects
