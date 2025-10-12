@@ -161,22 +161,24 @@ Browse all headlines with completing-read interface.
 
 All searches (semantic, fulltext, headline, image) can be limited to specific subsets of your indexed files. The scope setting applies to the *next search only* and then resets to "All files".
 
-From the main menu (=H-v=), press =-s= to open the scope submenu:
+From the main menu (=H-v=), use the scope options:
 
-- =a= :: Search all files (default)
-- =d= :: Limit to a specific directory
-- =p= :: Limit to a Projectile project (prompts to select from known projects)
-- =t= :: Limit to files with a specific keyword/tag
+- =-a= :: Search all files (default)
+- =-d= :: Limit to a specific directory
+- =-p= :: Limit to a Projectile project (prompts to select from known projects)
+- =-t= :: Limit to files with a specific keyword/tag
 
 Example workflow:
 1. Press =H-v= to open menu
-2. Press =-s= then =p= to select a project scope
+2. Press =-p= to select a project scope
 3. Choose "my-notes" from the project list
 4. Press =v= for semantic search
 5. Enter your query - results will only come from "my-notes" project
 6. Next search will automatically reset to "All files"
 
 The current scope is shown in the menu header: =org-db v3 [Scope: Project: my-notes]=
+
+Note: Scope options use dash prefixes (=-a=, =-d=, =-p=, =-t=) to distinguish them from action keys.
 
 ** 5. Agenda
 
@@ -185,7 +187,13 @@ M-x org-db-v3-agenda
 ;; or press 'a' in the menu
 #+END_SRC
 
-View all TODO items with deadlines and scheduled dates from indexed files.
+View TODO items with deadlines and scheduled dates from indexed files.
+
+By default, shows items due in the next **2 weeks**. Use prefix argument (=C-u M-x org-db-v3-agenda=) to specify a custom date range:
+- =+2w= - 2 weeks (default)
+- =+1m= - 1 month
+- =+3w= - 3 weeks
+- =2025-12-31= - specific date
 
 * Usage
 
@@ -193,8 +201,13 @@ View all TODO items with deadlines and scheduled dates from indexed files.
 
 Press =H-v= or =M-x org-db= to open the menu:
 
-*** Options
-- =-s= :: Set search scope (directory, project, tag, or all files)
+*** Scope Options
+- =-a= :: Search all files (reset scope)
+- =-d= :: Limit to directory
+- =-p= :: Limit to Projectile project
+- =-t= :: Limit to tag/keyword
+
+*** Actions
 - =q= :: Quit menu
 
 *** Search Commands
@@ -578,13 +591,16 @@ uv run python -c "import org_db_server"
 - [X] Full-text search (FTS5) with snippets
 - [X] Image search with CLIP
 - [X] Headline search
-- [X] Agenda (TODOs, deadlines, scheduled)
-- [X] Transient menu UI
+- [X] Scoped search (directory, project, tag filters)
+- [X] Agenda with customizable date ranges (default 2 weeks)
+- [X] Transient menu UI with infix arguments
 - [X] Web interface with statistics
 - [X] Non-blocking directory indexing
 - [X] File browser (open files from database)
 - [X] Search at point
 - [X] Auto-indexing on save
+- [X] Full file paths in search results
+- [X] Auto-enable for already-open buffers
 
 * Future Enhancements
 
