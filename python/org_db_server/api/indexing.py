@@ -117,15 +117,10 @@ async def index_file(request: IndexFileRequest):
                 (file_id, src.language, src.contents, src.begin)
             )
 
-        # Generate chunks from headline text for semantic search
-        headline_texts = [hl.title for hl in request.headlines if hl.title]
-
-        if headline_texts:
-            # Chunk the text
-            all_chunks = []
-            for text in headline_texts:
-                chunks = chunk_text(text, method="paragraph")
-                all_chunks.extend(chunks)
+        # Generate chunks from full file content for semantic search
+        if request.content:
+            # Chunk the full content with proper line tracking
+            all_chunks = chunk_text(request.content, method="paragraph")
 
             # Generate embeddings
             if all_chunks:

@@ -89,6 +89,7 @@
          (data `(("filename" . ,(buffer-file-name))
                  ("md5" . ,(md5 (current-buffer)))
                  ("file_size" . ,(or file-size 0))
+                 ("content" . ,(buffer-substring-no-properties (point-min) (point-max)))
                  ("headlines" . ,(vconcat (org-db-v3-parse-headlines parse-tree)))
                  ("links" . ,(vconcat (org-db-v3-parse-links parse-tree)))
                  ("keywords" . ,(vconcat (org-db-v3-parse-keywords parse-tree)))
