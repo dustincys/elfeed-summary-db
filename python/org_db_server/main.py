@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 from pathlib import Path
 
-from org_db_server.api import indexing, search, stats
+from org_db_server.api import indexing, search, stats, agenda
 
 app = FastAPI(title="org-db Server", version="0.1.0")
 
@@ -21,6 +21,7 @@ app.add_middleware(
 app.include_router(indexing.router)
 app.include_router(search.router)
 app.include_router(stats.router)
+app.include_router(agenda.router)
 
 @app.get("/health")
 async def health_check():

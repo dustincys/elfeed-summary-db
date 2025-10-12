@@ -16,6 +16,7 @@
 (require 'org-db-v3-search)
 (require 'org-db-v3-server)
 (require 'org-db-v3-client)
+(require 'org-db-v3-agenda)
 
 ;;;###autoload (autoload 'org-db-menu "org-db-v3-ui" nil t)
 (transient-define-prefix org-db-menu ()
@@ -33,6 +34,9 @@
    ["Image Search"
     ("i" "Search images" org-db-v3-image-search
      :description "Find images by text description")]]
+  ["Agenda"
+   ("A" "Show agenda" org-db-v3-agenda
+    :description "Show TODO items with deadlines and scheduled dates")]
   ["Management"
    ["Indexing"
     ("u" "Update current file" org-db-v3-update-current-file
