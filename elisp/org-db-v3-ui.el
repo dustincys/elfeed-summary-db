@@ -113,7 +113,7 @@ Returns plist with :filename_pattern and/or :keyword."
   [:description (lambda ()
                   (format "org-db v3 [Scope: %s]"
                           (org-db-v3--scope-description)))
-  ["Search"
+   ["Search"
    ["Text Search"
     ("v" "Semantic search" org-db-v3-semantic-search
      :description "Search by meaning using embeddings")
@@ -151,9 +151,9 @@ Returns plist with :filename_pattern and/or :keyword."
      :description "Open server log buffer")
     ("W" "Open web interface" org-db-v3-open-web-interface
      :description "Open server homepage in browser")]]
-  ["Options"
-   ("-s" "Set scope..." org-db-v3-scope-menu)
-   ("q" "Quit" transient-quit-one)])
+   ["Options"
+    ("-s" "Set scope..." org-db-v3-scope-menu)
+    ("q" "Quit" transient-quit-one)]])
 
 ;;;###autoload
 (defun org-db-v3-update-current-file ()
