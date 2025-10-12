@@ -61,7 +61,8 @@ For the completing read candidates in the search functions, create a tabular str
 
 No images seem to be found
 
-** update default the clip model to sentence transformers
+** DONE update default the clip model to sentence transformers
+CLOSED: [2025-10-12 Sun 07:57]
 
 model = SentenceTransformer("clip-ViT-B-32")
 
