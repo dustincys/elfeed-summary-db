@@ -55,7 +55,7 @@ def test_image_search_endpoint(client, tmp_path):
         "images": []  # Empty for now since we don't have actual images
     }
 
-    response = client.post("/api/index/file", json=payload)
+    response = client.post("/api/file", json=payload)
     assert response.status_code == 200
 
     # Query the image search endpoint

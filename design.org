@@ -3,7 +3,7 @@
 :GPTEL_MODEL: claude-sonnet-4-20250514
 :GPTEL_BACKEND: Claude
 :GPTEL_SYSTEM: You are a large language model working in Emacs and a helpful assistant. Respond concisely using org-mode syntax.\n\nWhen writing Python code, use this template:\n\n#+BEGIN_SRC jupyter-python\n<python-code>\n#+END_SRC\n
-:GPTEL_BOUNDS: ((response (585 812) (938 1041) (1123 1457)))
+:GPTEL_BOUNDS: ((response (585 812) (938 1041) (1123 1472)))
 :END:
 * org-db v3
 
@@ -39,10 +39,12 @@ Here's an elisp block to load all the elisp files in the elisp folder:
 (load-file "elisp/org-db-v3-server.el")
 (load-file "elisp/org-db-v3-ui.el")
 (load-file "elisp/org-db-v3.el")
+
+(org-db-menu)
 #+END_SRC
 
 #+RESULTS:
-: t
+| transient--resume-which-key-mode |
 
 elisp:org-db-menu
 
@@ -54,15 +56,18 @@ For the completing read candidates in the search functions, create a tabular str
 
 {score:<6.2f} | {context:<20s} | {fullpath}:{lineno}
 
+
 ** image search with thumbnails
 
 No images seem to be found
 
-** isn't there a server cli?
+** update default the clip model to sentence transformers
 
-** add indexing functionality
+model = SentenceTransformer("clip-ViT-B-32")
 
-** update default clip model to sentence transformers
+
+** DONE add indexing functionality
+CLOSED: [2025-10-12 Sun 07:55]
 
 ** DONE full text not finding results
 CLOSED: [2025-10-12 Sun 07:53]

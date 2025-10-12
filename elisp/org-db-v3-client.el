@@ -18,7 +18,7 @@
   (when (file-exists-p filename)
     (with-current-buffer (find-file-noselect filename)
       (let ((json-data (org-db-v3-parse-buffer-to-json)))
-        (plz 'post (concat (org-db-v3-server-url) "/api/index/file")
+        (plz 'post (concat (org-db-v3-server-url) "/api/file")
           :headers '(("Content-Type" . "application/json"))
           :body json-data
           :as #'json-read

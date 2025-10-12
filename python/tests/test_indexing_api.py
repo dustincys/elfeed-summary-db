@@ -29,7 +29,7 @@ def client(tmp_path):
     db.close()
 
 def test_index_file_endpoint(client):
-    """Test POST /api/index/file endpoint."""
+    """Test POST /api/file endpoint."""
     payload = {
         "filename": "/test/sample.org",
         "md5": "abc123",
@@ -51,7 +51,7 @@ def test_index_file_endpoint(client):
         "src_blocks": []
     }
 
-    response = client.post("/api/index/file", json=payload)
+    response = client.post("/api/file", json=payload)
 
     assert response.status_code == 200
     data = response.json()
@@ -88,7 +88,7 @@ def test_fts_populated_during_indexing(client, tmp_path):
         "src_blocks": []
     }
 
-    response = client.post("/api/index/file", json=payload)
+    response = client.post("/api/file", json=payload)
     assert response.status_code == 200
 
     # Query FTS5 table to verify content was indexed
