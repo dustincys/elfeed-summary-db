@@ -95,9 +95,24 @@ Returns plist with :filename_pattern and/or :keyword."
       (message "Scope: %s (next search only)"
                (org-db-v3--scope-description)))))
 
+;;;###autoload (autoload 'org-db-v3-scope-menu "org-db-v3-ui" nil t)
+(transient-define-prefix org-db-v3-scope-menu ()
+  "Set search scope for next search."
+  ["Search Scope (applies to next search only)"
+   ("a" "All files" org-db-v3-scope-all
+    :description "Search all indexed files")
+   ("d" "Directory..." org-db-v3-scope-directory
+    :description "Limit to specific directory")
+   ("p" "Current project" org-db-v3-scope-project
+    :description "Limit to Projectile project")
+   ("t" "Tag/Keyword..." org-db-v3-scope-tag
+    :description "Limit to files with keyword")])
+
 ;;;###autoload (autoload 'org-db-menu "org-db-v3-ui" nil t)
 (transient-define-prefix org-db-menu ()
-  "org-db v3 - Search and manage your org files."
+  [:description (lambda ()
+                  (format "org-db v3 [Scope: %s]"
+                          (org-db-v3--scope-description)))
   ["Search"
    ["Text Search"
     ("v" "Semantic search" org-db-v3-semantic-search
@@ -137,6 +152,7 @@ Returns plist with :filename_pattern and/or :keyword."
     ("W" "Open web interface" org-db-v3-open-web-interface
      :description "Open server homepage in browser")]]
   ["Options"
+   ("-s" "Set scope..." org-db-v3-scope-menu)
    ("q" "Quit" transient-quit-one)])
 
 ;;;###autoload
