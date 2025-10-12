@@ -39,18 +39,10 @@
     "Ensure server is running (stub for testing)."
     nil))
 
-(defcustom org-db-v3-search-results-buffer "*org-db search*"
-  "Buffer name for displaying search results."
-  :type 'string
-  :group 'org-db-v3)
-
 (defcustom org-db-v3-search-default-limit 10
   "Default number of search results to retrieve."
   :type 'integer
   :group 'org-db-v3)
-
-(defvar org-db-v3-last-search-results nil
-  "Store last search results for navigation.")
 
 ;;;###autoload
 (defun org-db-v3-semantic-search (query &optional limit)
@@ -74,92 +66,64 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
               (message "Search error: %s" (plz-error-message error))))))
 
 (defun org-db-v3-display-search-results (query response)
-  "Display search RESPONSE for QUERY in results buffer."
-  (let ((results (alist-get 'results response))
-        (model-used (alist-get 'model_used response)))
+  "Display search RESPONSE for QUERY using completing-read."
+  (let* ((results (alist-get 'results response))
+         (model-used (alist-get 'model_used response)))
 
-    ;; Store results for navigation
-    (setq org-db-v3-last-search-results results)
+    (if (zerop (length results))
+        (message "No results found for: %s" query)
 
-    (with-current-buffer (get-buffer-create org-db-v3-search-results-buffer)
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (org-mode)
+      ;; Build candidates with metadata
+      (let* ((candidates nil)
+             (metadata-table (make-hash-table :test 'equal)))
 
-        ;; Insert header
-        (insert (format "* Semantic Search Results: \"%s\"\n\n" query))
-        (insert (format "Model: %s | Results: %d\n\n" model-used (length results)))
+        (dotimes (i (length results))
+          (let* ((result (aref results i))
+                 (chunk-text (alist-get 'chunk_text result))
+                 (filename (alist-get 'filename result))
+                 (similarity (alist-get 'similarity_score result))
+                 (begin-line (alist-get 'begin_line result))
+                 (end-line (alist-get 'end_line result))
+                 ;; Truncate and clean chunk text for display
+                 (display-text (replace-regexp-in-string
+                               "[\n\r]+" " "
+                               (if (> (length chunk-text) 80)
+                                   (concat (substring chunk-text 0 77) "...")
+                                 chunk-text)))
+                 ;; Format: "context... | filename:line"
+                 (candidate (format "%.3f | %s | %s:%d"
+                                   similarity
+                                   display-text
+                                   (file-name-nondirectory filename)
+                                   begin-line)))
 
-        (if (zerop (length results))
-            (insert "No results found.\n")
+            ;; Store metadata
+            (puthash candidate
+                    (list :file filename
+                          :line begin-line
+                          :end-line end-line
+                          :text chunk-text)
+                    metadata-table)
+            (push candidate candidates)))
 
-          ;; Insert results
-          (dotimes (i (length results))
-            (let* ((result (aref results i))
-                   (chunk-text (alist-get 'chunk_text result))
-                   (filename (alist-get 'filename result))
-                   (similarity (alist-get 'similarity_score result))
-                   (begin-line (alist-get 'begin_line result))
-                   (end-line (alist-get 'end_line result)))
+        ;; Reverse to show best results first
+        (setq candidates (nreverse candidates))
 
-              (insert (format "** Result %d (score: %.3f)\n" (1+ i) similarity))
-              (insert (format "   :PROPERTIES:\n"))
-              (insert (format "   :FILE: %s\n" filename))
-              (insert (format "   :LINE: %d-%d\n" begin-line end-line))
-              (insert (format "   :END:\n\n"))
-              (insert (format "   %s\n\n" chunk-text)))))
-
-        ;; Set up buffer
-        (goto-char (point-min))
-        (setq buffer-read-only t)
-        (org-db-v3-search-mode))
-
-      ;; Display buffer
-      (pop-to-buffer (current-buffer)))))
-
-(defvar org-db-v3-search-mode-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "RET") #'org-db-v3-search-goto-result)
-    (define-key map (kbd "n") #'org-db-v3-search-next-result)
-    (define-key map (kbd "p") #'org-db-v3-search-previous-result)
-    (define-key map (kbd "q") #'quit-window)
-    (define-key map (kbd "s") #'org-db-v3-semantic-search)
-    map)
-  "Keymap for `org-db-v3-search-mode'.")
-
-(define-derived-mode org-db-v3-search-mode org-mode "org-db-search"
-  "Major mode for org-db search results.
-
-Key bindings:
-\\{org-db-v3-search-mode-map}"
-  (setq buffer-read-only t))
-
-(defun org-db-v3-search-goto-result ()
-  "Go to the file and location of the search result at point."
-  (interactive)
-  (let* ((file (org-entry-get (point) "FILE"))
-         (line-range (org-entry-get (point) "LINE"))
-         (line (when line-range
-                 (string-to-number (car (split-string line-range "-"))))))
-
-    (if (and file (file-exists-p file))
-        (progn
-          (find-file-other-window file)
-          (when line
-            (goto-char (point-min))
-            (forward-line (1- line)))
-          (recenter))
-      (message "File not found: %s" (or file "unknown")))))
-
-(defun org-db-v3-search-next-result ()
-  "Move to next search result."
-  (interactive)
-  (org-next-visible-heading 1))
-
-(defun org-db-v3-search-previous-result ()
-  "Move to previous search result."
-  (interactive)
-  (org-previous-visible-heading 1))
+        ;; Let user select
+        (let ((selection (completing-read
+                         (format "Search results (%s, %d found): "
+                                model-used (length results))
+                         candidates
+                         nil t)))
+          (when selection
+            (let* ((metadata (gethash selection metadata-table))
+                   (file (plist-get metadata :file))
+                   (line (plist-get metadata :line)))
+              (when (and file (file-exists-p file))
+                (find-file file)
+                (goto-char (point-min))
+                (forward-line (1- line))
+                (recenter)))))))))
 
 ;;;###autoload
 (defun org-db-v3-search-at-point ()
@@ -194,43 +158,61 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
               (message "Search error: %s" (plz-error-message error))))))
 
 (defun org-db-v3-display-fulltext-results (query response)
-  "Display full-text search RESPONSE for QUERY in results buffer."
+  "Display full-text search RESPONSE for QUERY using completing-read."
   (let ((results (alist-get 'results response)))
 
-    (with-current-buffer (get-buffer-create org-db-v3-search-results-buffer)
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (org-mode)
+    (if (zerop (length results))
+        (message "No results found for: %s" query)
 
-        ;; Insert header
-        (insert (format "* Full-Text Search Results: \"%s\"\n\n" query))
-        (insert (format "Results: %d\n\n" (length results)))
+      ;; Build candidates with metadata
+      (let* ((candidates nil)
+             (metadata-table (make-hash-table :test 'equal)))
 
-        (if (zerop (length results))
-            (insert "No results found.\n")
+        (dotimes (i (length results))
+          (let* ((result (aref results i))
+                 (filename (alist-get 'filename result))
+                 (title (alist-get 'title result))
+                 (content (alist-get 'content result))
+                 (tags (alist-get 'tags result))
+                 ;; Truncate content for display
+                 (display-text (replace-regexp-in-string
+                               "[\n\r]+" " "
+                               (if (> (length content) 60)
+                                   (concat (substring content 0 57) "...")
+                                 content)))
+                 ;; Format: "title | context... | filename"
+                 (candidate (format "%s | %s | %s"
+                                   title
+                                   display-text
+                                   (file-name-nondirectory filename))))
 
-          ;; Insert results
-          (dotimes (i (length results))
-            (let* ((result (aref results i))
-                   (filename (alist-get 'filename result))
-                   (title (alist-get 'title result))
-                   (content (alist-get 'content result))
-                   (tags (alist-get 'tags result)))
+            ;; Store metadata
+            (puthash candidate
+                    (list :file filename
+                          :title title
+                          :content content
+                          :tags tags)
+                    metadata-table)
+            (push candidate candidates)))
 
-              (insert (format "** Result %d: %s\n" (1+ i) title))
-              (insert (format "   :PROPERTIES:\n"))
-              (insert (format "   :FILE: %s\n" filename))
-              (insert (format "   :TAGS: %s\n" (or tags "")))
-              (insert (format "   :END:\n\n"))
-              (insert (format "   %s\n\n" content)))))
+        ;; Reverse to show in order
+        (setq candidates (nreverse candidates))
 
-        ;; Set up buffer
-        (goto-char (point-min))
-        (setq buffer-read-only t)
-        (org-db-v3-search-mode))
-
-      ;; Display buffer
-      (pop-to-buffer (current-buffer)))))
+        ;; Let user select
+        (let ((selection (completing-read
+                         (format "Fulltext results (%d found): " (length results))
+                         candidates
+                         nil t)))
+          (when selection
+            (let* ((metadata (gethash selection metadata-table))
+                   (file (plist-get metadata :file)))
+              (when (and file (file-exists-p file))
+                (find-file file)
+                ;; Try to search for the title in the file
+                (goto-char (point-min))
+                (when (search-forward (plist-get metadata :title) nil t)
+                  (beginning-of-line)
+                  (recenter))))))))))
 
 ;;;###autoload
 (defun org-db-v3-image-search (query &optional limit)
@@ -254,51 +236,57 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
               (message "Search error: %s" (plz-error-message error))))))
 
 (defun org-db-v3-display-image-results (query response)
-  "Display image search RESPONSE for QUERY in results buffer."
-  (let ((results (alist-get 'results response))
-        (model-used (alist-get 'model_used response)))
+  "Display image search RESPONSE for QUERY using completing-read."
+  (let* ((results (alist-get 'results response))
+         (model-used (alist-get 'model_used response)))
 
-    (with-current-buffer (get-buffer-create org-db-v3-search-results-buffer)
-      (let ((inhibit-read-only t))
-        (erase-buffer)
-        (org-mode)
+    (if (zerop (length results))
+        (message "No images found for: %s" query)
 
-        ;; Insert header
-        (insert (format "* Image Search Results: \"%s\"\n\n" query))
-        (insert (format "Model: %s | Results: %d\n\n" model-used (length results)))
+      ;; Build candidates with metadata
+      (let* ((candidates nil)
+             (metadata-table (make-hash-table :test 'equal)))
 
-        (if (zerop (length results))
-            (insert "No results found.\n")
+        (dotimes (i (length results))
+          (let* ((result (aref results i))
+                 (image-path (alist-get 'image_path result))
+                 (filename (alist-get 'filename result))
+                 (similarity (alist-get 'similarity_score result))
+                 ;; Format: "score | image-filename | org-filename"
+                 (candidate (format "%.3f | %s | %s"
+                                   similarity
+                                   (file-name-nondirectory image-path)
+                                   (file-name-nondirectory filename))))
 
-          ;; Insert results
-          (dotimes (i (length results))
-            (let* ((result (aref results i))
-                   (image-path (alist-get 'image_path result))
-                   (filename (alist-get 'filename result))
-                   (similarity (alist-get 'similarity_score result)))
+            ;; Store metadata
+            (puthash candidate
+                    (list :image-path image-path
+                          :file filename
+                          :similarity similarity)
+                    metadata-table)
+            (push candidate candidates)))
 
-              (insert (format "** Result %d (score: %.3f)\n" (1+ i) similarity))
-              (insert (format "   :PROPERTIES:\n"))
-              (insert (format "   :IMAGE: %s\n" image-path))
-              (insert (format "   :FILE: %s\n" filename))
-              (insert (format "   :END:\n\n"))
+        ;; Reverse to show best results first
+        (setq candidates (nreverse candidates))
 
-              ;; Display inline thumbnail using text property
-              (when (and (file-exists-p image-path)
-                        (display-images-p))
-                (insert "   ")
-                ;; Use propertize with 'display property for inline thumbnail
-                (insert (propertize " " 'display
-                                   (create-image image-path nil nil :width 300)))
-                (insert "\n\n")))))
-
-        ;; Set up buffer
-        (goto-char (point-min))
-        (setq buffer-read-only t)
-        (org-db-v3-search-mode))
-
-      ;; Display buffer
-      (pop-to-buffer (current-buffer)))))
+        ;; Let user select
+        (let ((selection (completing-read
+                         (format "Image results (%s, %d found): "
+                                model-used (length results))
+                         candidates
+                         nil t)))
+          (when selection
+            (let* ((metadata (gethash selection metadata-table))
+                   (image-path (plist-get metadata :image-path))
+                   (file (plist-get metadata :file)))
+              ;; Open the org file
+              (when (and file (file-exists-p file))
+                (find-file file)
+                ;; Try to search for the image link in the file
+                (goto-char (point-min))
+                (when (search-forward (file-name-nondirectory image-path) nil t)
+                  (beginning-of-line)
+                  (recenter)))))))))))
 
 (provide 'org-db-v3-search)
 ;;; org-db-v3-search.el ends here
