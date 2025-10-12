@@ -35,29 +35,36 @@
         :then (lambda (response)
                 (message "Indexed %s (%d headlines)"
                          filename
-                         (alist-get 'headlines_count response)))
+                         (alist-get 'headlines_count response))
+                ;; Mark indexing as complete and process next item
+                (setq org-db-v3-indexing-in-progress nil)
+                (org-db-v3-process-queue))
         :else (lambda (error)
-                (message "Error indexing %s: %s" filename error))))))
+                (message "Error indexing %s: %s" filename error)
+                ;; Mark indexing as complete and process next item
+                (setq org-db-v3-indexing-in-progress nil)
+                (org-db-v3-process-queue))))))
 
 (defun org-db-v3-process-queue ()
   "Process the indexing queue."
   (when (and org-db-v3-index-queue
-             (not org-db-v3-indexing-in-progress)
-             (current-idle-time))
+             (not org-db-v3-indexing-in-progress))
     (setq org-db-v3-indexing-in-progress t)
     (let ((filename (pop org-db-v3-index-queue)))
-      (when (file-exists-p filename)
-        (org-db-v3-index-file-async filename))
-      (setq org-db-v3-indexing-in-progress nil))))
+      (if (file-exists-p filename)
+          (org-db-v3-index-file-async filename)
+        ;; If file doesn't exist, mark as complete and continue
+        (setq org-db-v3-indexing-in-progress nil)
+        (org-db-v3-process-queue)))))
 
 (defvar org-db-v3-idle-timer nil
   "Timer for processing the queue.")
 
 (defun org-db-v3-start-queue-processing ()
-  "Start the idle timer for queue processing."
+  "Start the timer for queue processing."
   (unless org-db-v3-idle-timer
     (setq org-db-v3-idle-timer
-          (run-with-idle-timer 5 t #'org-db-v3-process-queue))))
+          (run-with-timer 1 2 #'org-db-v3-process-queue))))
 
 (defun org-db-v3-stop-queue-processing ()
   "Stop the idle timer."
@@ -87,7 +94,19 @@
           (org-db-v3-add-to-queue file))
         (message "Added %d org file%s to indexing queue"
                  count
-                 (if (= count 1) "" "s"))))))
+                 (if (= count 1) "" "s"))
+        ;; Start processing immediately
+        (org-db-v3-process-queue)))))
+
+;;;###autoload
+(defun org-db-v3-queue-status ()
+  "Show the current indexing queue status."
+  (interactive)
+  (message "Queue: %d files pending, %s"
+           (length org-db-v3-index-queue)
+           (if org-db-v3-indexing-in-progress
+               "indexing in progress"
+             "idle")))
 
 (provide 'org-db-v3-client)
 ;;; org-db-v3-client.el ends here
