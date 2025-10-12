@@ -18,14 +18,48 @@
 (require 'org-db-v3-client)
 (require 'org-db-v3-agenda)
 
+(defvar org-db-v3-search-scope '(all . nil)
+  "Current search scope. Format: (type . value)
+   - (all . nil) - search all files
+   - (directory . \"/path/to/dir/\") - files under directory
+   - (project . \"/path/to/project/\") - files in project root
+   - (tag . \"tag-name\") - files with specific keyword/tag
+   Resets to (all . nil) after each search.")
+
+(defun org-db-v3--scope-description ()
+  "Return current scope description for transient header."
+  (pcase (car org-db-v3-search-scope)
+    ('all "All files")
+    ('directory (format "Directory: %s"
+                        (file-name-nondirectory
+                         (directory-file-name (cdr org-db-v3-search-scope)))))
+    ('project (format "Project: %s"
+                      (file-name-nondirectory
+                       (directory-file-name (cdr org-db-v3-search-scope)))))
+    ('tag (format "Tag: %s" (cdr org-db-v3-search-scope)))
+    (_ "All files")))
+
+(defun org-db-v3--scope-to-params ()
+  "Convert current scope to API filter parameters.
+Returns plist with :filename_pattern and/or :keyword."
+  (pcase (car org-db-v3-search-scope)
+    ('all nil)
+    ('directory
+     (list :filename_pattern (concat (cdr org-db-v3-search-scope) "%")))
+    ('project
+     (list :filename_pattern (concat (cdr org-db-v3-search-scope) "%")))
+    ('tag
+     (list :keyword (cdr org-db-v3-search-scope)))
+    (_ nil)))
+
 ;;;###autoload (autoload 'org-db-menu "org-db-v3-ui" nil t)
 (transient-define-prefix org-db-menu ()
   "org-db v3 - Search and manage your org files."
   ["Search"
    ["Text Search"
-    ("s" "Semantic search" org-db-v3-semantic-search
+    ("v" "Semantic search" org-db-v3-semantic-search
      :description "Search by meaning using embeddings")
-    ("f" "Full-text search" org-db-v3-fulltext-search
+    ("k" "Full-text search" org-db-v3-fulltext-search
      :description "Search by keywords (FTS5)")
     ("h" "Headline search" org-db-v3-headline-search
      :description "Search/browse headlines and jump to them")
@@ -33,7 +67,10 @@
      :description "Search using text at point/region")]
    ["Image Search"
     ("i" "Search images" org-db-v3-image-search
-     :description "Find images by text description")]]
+     :description "Find images by text description")]
+   ["Files"
+    ("f" "Open file from db" org-db-v3-open-file
+     :description "Browse and open files in database")]]
   ["Agenda"
    ("a" "Show agenda" org-db-v3-agenda
     :description "Show TODO items with deadlines and scheduled dates")]
@@ -106,23 +143,16 @@
 
 ;;;###autoload
 (defun org-db-v3-view-logs ()
-  "View the server log buffer or file."
+  "View the server log file."
   (interactive)
-  (let ((buffer (get-buffer "*org-db-server*"))
-        (log-file "/tmp/org-db-server.log"))
-    (cond
-     ;; First try process buffer
-     (buffer
-      (pop-to-buffer buffer))
-     ;; Then try log file
-     ((file-exists-p log-file)
-      (find-file-other-window log-file)
-      (goto-char (point-max))
-      (auto-revert-tail-mode 1)
-      (message "Viewing server logs from %s" log-file))
-     ;; No logs available
-     (t
-      (message "No server logs found. Server not running or logs not captured.")))))
+  (let ((log-file "/tmp/org-db-server.log"))
+    (if (file-exists-p log-file)
+        (progn
+          (find-file-other-window log-file)
+          (goto-char (point-max))
+          (auto-revert-tail-mode 1)
+          (message "Viewing server logs from %s" log-file))
+      (message "Server log file not found: %s" log-file))))
 
 ;;;###autoload
 (defun org-db-v3-open-web-interface ()
