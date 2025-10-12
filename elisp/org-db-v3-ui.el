@@ -52,73 +52,69 @@ Returns plist with :filename_pattern and/or :keyword."
      (list :keyword (cdr org-db-v3-search-scope)))
     (_ nil)))
 
-;;;###autoload
-(defun org-db-v3-scope-all ()
-  "Set search scope to all files."
-  (interactive)
-  (setq org-db-v3-search-scope '(all . nil))
-  (message "Scope: All files (next search only)"))
-
-;;;###autoload
-(defun org-db-v3-scope-directory ()
+;; Transient infix for directory scope
+(transient-define-infix org-db-v3--scope-directory-infix ()
   "Set search scope to a directory."
-  (interactive)
-  (let ((dir (read-directory-name "Limit search to directory: ")))
-    (when dir
-      (setq org-db-v3-search-scope
-            (cons 'directory (expand-file-name dir)))
-      (message "Scope: %s (next search only)"
-               (org-db-v3--scope-description)))))
+  :class 'transient-lisp-variable
+  :variable 'org-db-v3-search-scope
+  :key "-d"
+  :description "Directory"
+  :reader (lambda (prompt _initial-input _history)
+            (let ((dir (read-directory-name "Limit search to directory: ")))
+              (when dir
+                (cons 'directory (expand-file-name dir))))))
 
-;;;###autoload
-(defun org-db-v3-scope-project ()
-  "Set search scope to a Projectile project.
-Prompts user to select from known projects, with current project as default."
-  (interactive)
-  (if (and (fboundp 'projectile-completing-read)
-           (fboundp 'projectile-relevant-known-projects))
-      (let* ((projects (projectile-relevant-known-projects))
-             (current-project (when (fboundp 'projectile-project-root)
-                                (projectile-project-root)))
-             (project (if projects
-                          (projectile-completing-read
-                           "Select project: "
-                           projects
-                           :initial-input current-project)
-                        current-project)))
-        (if project
-            (progn
-              (setq org-db-v3-search-scope (cons 'project project))
-              (message "Scope: %s (next search only)"
-                       (org-db-v3--scope-description)))
-          (message "No project selected. Scope unchanged.")))
-    (message "Projectile not available. Scope unchanged.")
-    (ding)))
+;; Transient infix for project scope
+(transient-define-infix org-db-v3--scope-project-infix ()
+  "Set search scope to a Projectile project."
+  :class 'transient-lisp-variable
+  :variable 'org-db-v3-search-scope
+  :key "-p"
+  :description "Project"
+  :reader (lambda (prompt _initial-input _history)
+            (if (and (fboundp 'projectile-completing-read)
+                     (fboundp 'projectile-relevant-known-projects))
+                (let* ((projects (projectile-relevant-known-projects))
+                       (current-project (when (fboundp 'projectile-project-root)
+                                          (projectile-project-root)))
+                       (project (if projects
+                                    (projectile-completing-read
+                                     "Select project: "
+                                     projects
+                                     :initial-input current-project)
+                                  current-project)))
+                  (if project
+                      (cons 'project project)
+                    (prog1 nil
+                      (message "No project selected. Scope unchanged."))))
+              (prog1 nil
+                (message "Projectile not available. Scope unchanged.")
+                (ding)))))
 
-;;;###autoload
-(defun org-db-v3-scope-tag ()
+;; Transient infix for tag scope
+(transient-define-infix org-db-v3--scope-tag-infix ()
   "Set search scope to files with a specific keyword/tag."
-  (interactive)
-  (let ((tag (read-string "Limit search to keyword/tag: ")))
-    (when (and tag (not (string-empty-p tag)))
-      (setq org-db-v3-search-scope
-            (cons 'tag tag))
-      (message "Scope: %s (next search only)"
-               (org-db-v3--scope-description)))))
+  :class 'transient-lisp-variable
+  :variable 'org-db-v3-search-scope
+  :key "-t"
+  :description "Tag/keyword"
+  :reader (lambda (prompt _initial-input _history)
+            (let ((tag (read-string "Limit search to keyword/tag: ")))
+              (when (and tag (not (string-empty-p tag)))
+                (cons 'tag tag)))))
 
 ;;;###autoload (autoload 'org-db-menu "org-db-v3-ui" nil t)
 (transient-define-prefix org-db-menu ()
   [:description (lambda () (format "org-db v3 [Scope: %s]" (org-db-v3--scope-description)))
    "Search and manage your org files."]
-  [["Scope (applies to next search)"
-    ("-a" "All files" org-db-v3-scope-all
-     :transient t)
-    ("-d" "Directory..." org-db-v3-scope-directory
-     :transient t)
-    ("-p" "Project..." org-db-v3-scope-project
-     :transient t)
-    ("-t" "Tag/keyword..." org-db-v3-scope-tag
-     :transient t)]
+  [["Scope"
+    ("-a" "All files"
+     :class transient-lisp-variable
+     :variable org-db-v3-search-scope
+     :reader (lambda (&rest _) '(all . nil)))
+    ("-d" org-db-v3--scope-directory-infix)
+    ("-p" org-db-v3--scope-project-infix)
+    ("-t" org-db-v3--scope-tag-infix)]
    ["Actions"
     ("q" "Quit" transient-quit-one)]]
   ["Search"
