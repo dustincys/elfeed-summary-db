@@ -187,15 +187,13 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                                 "[\n\r]+" " "
                                 (replace-regexp-in-string ">>>\\|<<<" "" snippet)))
                  ;; Fixed widths for alignment
-                 (rank-width 8)
                  (snippet-width 60)
                  (display-snippet (if (> (length clean-snippet) snippet-width)
                                      (concat (substring clean-snippet 0 (- snippet-width 3)) "...")
                                    clean-snippet))
                  (padded-snippet (format (format "%%-%ds" snippet-width) display-snippet))
                  ;; Format with fixed-width columns: rank | snippet | filename
-                 (candidate (format "%*.2f | %s | %s"
-                                   rank-width
+                 (candidate (format "%8.2f | %s | %s"
                                    (abs rank)  ; bm25 scores are negative
                                    padded-snippet
                                    (file-name-nondirectory filename))))
