@@ -89,17 +89,9 @@ class Database:
 
         self.conn.commit()
 
-    def populate_fts(self, filename_id: int, headlines: List[Dict]):
-        """Populate FTS5 table with headline content."""
+    def populate_fts(self, filename_id: int, filename: str, content: str):
+        """Populate FTS5 table with entire file content."""
         cursor = self.conn.cursor()
-
-        # Get filename
-        cursor.execute("SELECT filename FROM files WHERE rowid = ?", (filename_id,))
-        filename_row = cursor.fetchone()
-        if not filename_row:
-            return
-
-        filename = filename_row[0]
 
         # Delete existing FTS entries for this file
         cursor.execute(
@@ -107,16 +99,12 @@ class Database:
             (filename,)
         )
 
-        # Insert headlines directly into FTS
-        for hl in headlines:
-            title = hl.get("title", "")
-            tags = hl.get("tags", "")
-
-            if title:  # Only index if there's a title
-                cursor.execute(
-                    "INSERT INTO fts_content(filename, title, content, tags) VALUES (?, ?, ?, ?)",
-                    (filename, title, title, tags)  # Use title as content for now
-                )
+        # Insert entire file content into FTS
+        # Use filename as title, full content as content, empty tags
+        cursor.execute(
+            "INSERT INTO fts_content(filename, title, content, tags) VALUES (?, ?, ?, ?)",
+            (filename, filename, content, "")
+        )
 
         self.conn.commit()
 

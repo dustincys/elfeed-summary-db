@@ -49,6 +49,7 @@ class IndexFileRequest(BaseModel):
     filename: str
     md5: str
     file_size: int
+    content: Optional[str] = None
     headlines: List[HeadlineData] = Field(default_factory=list)
     links: List[LinkData] = Field(default_factory=list)
     keywords: List[KeywordData] = Field(default_factory=list)
