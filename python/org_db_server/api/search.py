@@ -32,7 +32,9 @@ async def semantic_search(request: SemanticSearchRequest):
 
         # Fetch all stored embeddings from database
         cursor = db.conn.cursor()
-        cursor.execute("""
+
+        # Build query with optional filters
+        base_query = """
             SELECT
                 e.rowid as chunk_id,
                 e.embedding_vector,
@@ -44,9 +46,29 @@ async def semantic_search(request: SemanticSearchRequest):
             FROM embeddings e
             JOIN chunks c ON e.chunk_id = c.rowid
             JOIN files f ON c.filename_id = f.rowid
-            WHERE e.embedding_model = ?
-        """, (model_name,))
+        """
 
+        params = [model_name]
+        where_clauses = ["e.embedding_model = ?"]
+
+        # Add filename pattern filter if provided
+        if request.filename_pattern:
+            where_clauses.append("f.filename LIKE ?")
+            params.append(request.filename_pattern)
+
+        # Add keyword filter if provided
+        if request.keyword:
+            base_query += """
+                JOIN file_keywords fk ON f.rowid = fk.filename_id
+                JOIN keywords k ON fk.keyword_id = k.rowid
+            """
+            where_clauses.append("k.keyword = ?")
+            params.append(request.keyword)
+
+        # Combine WHERE clauses
+        base_query += " WHERE " + " AND ".join(where_clauses)
+
+        cursor.execute(base_query, params)
         rows = cursor.fetchall()
 
         if not rows:
