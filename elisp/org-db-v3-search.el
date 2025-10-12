@@ -18,6 +18,10 @@
 ;; Forward declarations
 (declare-function org-db-v3-server-url "org-db-v3")
 (declare-function org-db-v3-ensure-server "org-db-v3")
+(declare-function org-db-v3--scope-to-params "org-db-v3-ui")
+
+;; Forward declare scope variable
+(defvar org-db-v3-search-scope)
 
 ;; Require plz only when available (not in tests)
 (when (require 'plz nil t)
@@ -54,15 +58,27 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
 
   (org-db-v3-ensure-server)
 
-  (let ((limit (or limit org-db-v3-search-default-limit)))
+  (let* ((limit (or limit org-db-v3-search-default-limit))
+         (scope-params (when (fboundp 'org-db-v3--scope-to-params)
+                         (org-db-v3--scope-to-params)))
+         (request-body (append `((query . ,query)
+                                (limit . ,limit))
+                              (when scope-params
+                                (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                      (cons 'keyword (plist-get scope-params :keyword)))))))
     (plz 'post (concat (org-db-v3-server-url) "/api/search/semantic")
       :headers '(("Content-Type" . "application/json"))
-      :body (json-encode `((query . ,query)
-                          (limit . ,limit)))
+      :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
       :as #'json-read
       :then (lambda (response)
+              ;; Reset scope after search
+              (when (boundp 'org-db-v3-search-scope)
+                (setq org-db-v3-search-scope '(all . nil)))
               (org-db-v3-display-search-results query response))
       :else (lambda (error)
+              ;; Reset scope even on error
+              (when (boundp 'org-db-v3-search-scope)
+                (setq org-db-v3-search-scope '(all . nil)))
               (message "Search error: %s" (plz-error-message error))))))
 
 (defun org-db-v3-display-search-results (query response)
@@ -149,15 +165,27 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
 
   (org-db-v3-ensure-server)
 
-  (let ((limit (or limit org-db-v3-search-default-limit)))
+  (let* ((limit (or limit org-db-v3-search-default-limit))
+         (scope-params (when (fboundp 'org-db-v3--scope-to-params)
+                         (org-db-v3--scope-to-params)))
+         (request-body (append `((query . ,query)
+                                (limit . ,limit))
+                              (when scope-params
+                                (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                      (cons 'keyword (plist-get scope-params :keyword)))))))
     (plz 'post (concat (org-db-v3-server-url) "/api/search/fulltext")
       :headers '(("Content-Type" . "application/json"))
-      :body (json-encode `((query . ,query)
-                          (limit . ,limit)))
+      :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
       :as #'json-read
       :then (lambda (response)
+              ;; Reset scope after search
+              (when (boundp 'org-db-v3-search-scope)
+                (setq org-db-v3-search-scope '(all . nil)))
               (org-db-v3-display-fulltext-results query response))
       :else (lambda (error)
+              ;; Reset scope even on error
+              (when (boundp 'org-db-v3-search-scope)
+                (setq org-db-v3-search-scope '(all . nil)))
               (message "Search error: %s" (plz-error-message error))))))
 
 (defun org-db-v3-display-fulltext-results (query response)
@@ -244,15 +272,27 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
 
   (org-db-v3-ensure-server)
 
-  (let ((limit (or limit org-db-v3-search-default-limit)))
+  (let* ((limit (or limit org-db-v3-search-default-limit))
+         (scope-params (when (fboundp 'org-db-v3--scope-to-params)
+                         (org-db-v3--scope-to-params)))
+         (request-body (append `((query . ,query)
+                                (limit . ,limit))
+                              (when scope-params
+                                (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                      (cons 'keyword (plist-get scope-params :keyword)))))))
     (plz 'post (concat (org-db-v3-server-url) "/api/search/images")
       :headers '(("Content-Type" . "application/json"))
-      :body (json-encode `((query . ,query)
-                          (limit . ,limit)))
+      :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
       :as #'json-read
       :then (lambda (response)
+              ;; Reset scope after search
+              (when (boundp 'org-db-v3-search-scope)
+                (setq org-db-v3-search-scope '(all . nil)))
               (org-db-v3-display-image-results query response))
       :else (lambda (error)
+              ;; Reset scope even on error
+              (when (boundp 'org-db-v3-search-scope)
+                (setq org-db-v3-search-scope '(all . nil)))
               (message "Search error: %s" (plz-error-message error))))))
 
 (defun org-db-v3-display-image-results (query response)
@@ -330,15 +370,27 @@ You can filter candidates dynamically using completing-read."
 
   (org-db-v3-ensure-server)
 
-  (plz 'post (concat (org-db-v3-server-url) "/api/search/headlines")
-    :headers '(("Content-Type" . "application/json"))
-    :body (json-encode `((query . "")
-                        (limit . 1000)))
-    :as #'json-read
-    :then (lambda (response)
-            (org-db-v3-display-headline-results response))
-    :else (lambda (error)
-            (message "Search error: %s" (plz-error-message error)))))
+  (let* ((scope-params (when (fboundp 'org-db-v3--scope-to-params)
+                         (org-db-v3--scope-to-params)))
+         (request-body (append `((query . "")
+                                (limit . 1000))
+                              (when scope-params
+                                (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                      (cons 'keyword (plist-get scope-params :keyword)))))))
+    (plz 'post (concat (org-db-v3-server-url) "/api/search/headlines")
+      :headers '(("Content-Type" . "application/json"))
+      :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
+      :as #'json-read
+      :then (lambda (response)
+              ;; Reset scope after search
+              (when (boundp 'org-db-v3-search-scope)
+                (setq org-db-v3-search-scope '(all . nil)))
+              (org-db-v3-display-headline-results response))
+      :else (lambda (error)
+              ;; Reset scope even on error
+              (when (boundp 'org-db-v3-search-scope)
+                (setq org-db-v3-search-scope '(all . nil)))
+              (message "Search error: %s" (plz-error-message error))))))
 
 (defun org-db-v3-display-headline-results (response)
   "Display headline search RESPONSE using completing-read."
@@ -408,6 +460,63 @@ Returns 1 if file doesn't exist."
         (line-number-at-pos))
     ;; File doesn't exist (e.g., test files), return reasonable default
     1))
+
+;;;###autoload
+(defun org-db-v3-open-file ()
+  "Browse all files in database and open selected file."
+  (interactive)
+
+  (org-db-v3-ensure-server)
+
+  (plz 'get (concat (org-db-v3-server-url) "/api/stats/files")
+    :as #'json-read
+    :then (lambda (response)
+            (org-db-v3-display-file-list response))
+    :else (lambda (error)
+            (message "Error fetching files: %s" (plz-error-message error)))))
+
+(defun org-db-v3-display-file-list (response)
+  "Display file list from RESPONSE using completing-read."
+  (let* ((files (alist-get 'files response))
+         (count (alist-get 'count response)))
+
+    (if (zerop count)
+        (message "No files found in database")
+
+      ;; Build candidates with metadata
+      (let* ((candidates nil)
+             (metadata-table (make-hash-table :test 'equal)))
+
+        (dotimes (i (length files))
+          (let* ((file-info (aref files i))
+                 (filename (alist-get 'filename file-info))
+                 (indexed-at (alist-get 'indexed_at file-info))
+                 ;; Format timestamp for display (remove microseconds if present)
+                 (display-time (if indexed-at
+                                  (replace-regexp-in-string "\\..*" "" indexed-at)
+                                "unknown"))
+                 ;; Format: timestamp | filename
+                 (candidate (format "%s | %s"
+                                   display-time
+                                   filename)))
+
+            ;; Store metadata
+            (puthash candidate filename metadata-table)
+            (push candidate candidates)))
+
+        ;; Keep chronological order (most recent first, already sorted from server)
+        (setq candidates (nreverse candidates))
+
+        ;; Let user select
+        (let ((selection (completing-read
+                         (format "Open file (%d files in database): " count)
+                         candidates
+                         nil t)))
+          (when selection
+            (let ((file (gethash selection metadata-table)))
+              (if (and file (file-exists-p file))
+                  (find-file file)
+                (message "File does not exist: %s" file)))))))))
 
 (provide 'org-db-v3-search)
 ;;; org-db-v3-search.el ends here
