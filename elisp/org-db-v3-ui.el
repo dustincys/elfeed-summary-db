@@ -43,7 +43,9 @@
     ("R" "Restart server" org-db-v3-restart-server
      :description "Stop and start the server")
     ("L" "View server logs" org-db-v3-view-logs
-     :description "Open server log buffer")]]
+     :description "Open server log buffer")
+    ("W" "Open web interface" org-db-v3-open-web-interface
+     :description "Open server homepage in browser")]]
   ["Options"
    ("q" "Quit" transient-quit-one)])
 
@@ -98,6 +100,17 @@
     (if buffer
         (pop-to-buffer buffer)
       (message "Server log buffer not found. Is the server running?"))))
+
+;;;###autoload
+(defun org-db-v3-open-web-interface ()
+  "Open the org-db server web interface in a browser."
+  (interactive)
+  (org-db-v3-ensure-server)
+  (if (org-db-v3-server-running-p)
+      (progn
+        (browse-url (org-db-v3-server-url))
+        (message "Opening org-db web interface at %s" (org-db-v3-server-url)))
+    (message "org-db server is not running")))
 
 ;; Make org-db-menu available as M-x org-db
 ;;;###autoload
