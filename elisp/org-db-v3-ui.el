@@ -111,20 +111,25 @@ Prompts user to select from known projects, with current project as default."
   "Set search scope for next search."
   ["Search Scope (applies to next search only)"
    ("a" "All files" org-db-v3-scope-all
-    :description "Search all indexed files")
+    :description "Search all indexed files"
+    :transient t)
    ("d" "Directory..." org-db-v3-scope-directory
-    :description "Limit to specific directory")
+    :description "Limit to specific directory"
+    :transient t)
    ("p" "Current project" org-db-v3-scope-project
-    :description "Limit to Projectile project")
+    :description "Limit to Projectile project"
+    :transient t)
    ("t" "Tag/Keyword..." org-db-v3-scope-tag
-    :description "Limit to files with keyword")])
+    :description "Limit to files with keyword"
+    :transient t)])
 
 ;;;###autoload (autoload 'org-db-menu "org-db-v3-ui" nil t)
 (transient-define-prefix org-db-menu ()
   [:description (lambda () (format "org-db v3 [Scope: %s]" (org-db-v3--scope-description)))
    "Search and manage your org files."]
   ["Options"
-   ("-s" "Set scope..." org-db-v3-scope-menu)
+   ("-s" "Set scope..." org-db-v3-scope-menu
+    :transient transient--do-replace)
    ("q" "Quit" transient-quit-one)]
   ["Search"
    ["Text Search"
