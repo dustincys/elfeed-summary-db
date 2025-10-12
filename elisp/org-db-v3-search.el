@@ -85,15 +85,18 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                  (begin-line (alist-get 'begin_line result))
                  (end-line (alist-get 'end_line result))
                  ;; Truncate and clean chunk text for display
+                 (context-width 60)
                  (display-text (replace-regexp-in-string
                                "[\n\r]+" " "
-                               (if (> (length chunk-text) 80)
-                                   (concat (substring chunk-text 0 77) "...")
+                               (if (> (length chunk-text) context-width)
+                                   (concat (substring chunk-text 0 (- context-width 3)) "...")
                                  chunk-text)))
-                 ;; Format: "context... | filename:line"
-                 (candidate (format "%.3f | %s | %s:%d"
+                 ;; Pad context to fixed width for alignment
+                 (padded-context (format (format "%%-%ds" context-width) display-text))
+                 ;; Format with fixed-width columns: score | context | filename:line
+                 (candidate (format "%-6.3f | %s | %s:%d"
                                    similarity
-                                   display-text
+                                   padded-context
                                    (file-name-nondirectory filename)
                                    begin-line)))
 
@@ -175,15 +178,23 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                  (content (alist-get 'content result))
                  (tags (alist-get 'tags result))
                  ;; Truncate content for display
-                 (display-text (replace-regexp-in-string
-                               "[\n\r]+" " "
-                               (if (> (length content) 60)
-                                   (concat (substring content 0 57) "...")
-                                 content)))
-                 ;; Format: "title | context... | filename"
+                 (title-width 30)
+                 (content-width 50)
+                 (display-title (if (> (length title) title-width)
+                                   (concat (substring title 0 (- title-width 3)) "...")
+                                 title))
+                 (display-content (replace-regexp-in-string
+                                  "[\n\r]+" " "
+                                  (if (> (length content) content-width)
+                                      (concat (substring content 0 (- content-width 3)) "...")
+                                    content)))
+                 ;; Pad to fixed width for alignment
+                 (padded-title (format (format "%%-%ds" title-width) display-title))
+                 (padded-content (format (format "%%-%ds" content-width) display-content))
+                 ;; Format with fixed-width columns: title | content | filename
                  (candidate (format "%s | %s | %s"
-                                   title
-                                   display-text
+                                   padded-title
+                                   padded-content
                                    (file-name-nondirectory filename))))
 
             ;; Store metadata
@@ -252,10 +263,17 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                  (image-path (alist-get 'image_path result))
                  (filename (alist-get 'filename result))
                  (similarity (alist-get 'similarity_score result))
-                 ;; Format: "score | image-filename | org-filename"
-                 (candidate (format "%.3f | %s | %s"
+                 ;; Fixed widths for alignment
+                 (image-width 40)
+                 (display-image (file-name-nondirectory image-path))
+                 (truncated-image (if (> (length display-image) image-width)
+                                     (concat (substring display-image 0 (- image-width 3)) "...")
+                                   display-image))
+                 (padded-image (format (format "%%-%ds" image-width) truncated-image))
+                 ;; Format with fixed-width columns: score | image-filename | org-filename
+                 (candidate (format "%-6.3f | %s | %s"
                                     similarity
-                                    (file-name-nondirectory image-path)
+                                    padded-image
                                     (file-name-nondirectory filename))))
 
             ;; Store metadata
