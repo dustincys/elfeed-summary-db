@@ -53,18 +53,40 @@ When t, auto-indexing on save will be enabled for all org files."
 (defvar org-db-v3-server-process nil
   "Process running the org-db server.")
 
+(defvar org-db-v3-server-starting nil
+  "Non-nil when server is currently starting up.
+Used to prevent concurrent start attempts.")
+
 (defun org-db-v3-server-url ()
   "Return the base URL for the org-db server."
   (format "http://%s:%d" org-db-v3-server-host org-db-v3-server-port))
 
 (defun org-db-v3-server-running-p ()
-  "Check if the org-db server is running."
-  (condition-case nil
-      (plz 'get (concat (org-db-v3-server-url) "/health")
-        :as #'json-read
-        :then (lambda (response) t)
-        :else (lambda (error) nil))
-    (error nil)))
+  "Check if the org-db server is running.
+Returns t if server responds to health check, nil otherwise.
+Uses a short timeout to fail fast if server is stuck."
+  (condition-case err
+      (let ((url-request-method "GET")
+            (url-request-extra-headers nil)
+            ;; Set connection timeout to 1 second
+            (url-http-attempt-keepalives nil))
+        (with-timeout (1 nil)  ; 1 second timeout
+          (with-current-buffer
+              (url-retrieve-synchronously
+               (concat (org-db-v3-server-url) "/health")
+               t nil 1)  ; 1 second read timeout
+            (goto-char (point-min))
+            (let ((status-line (buffer-substring-no-properties
+                               (point) (line-end-position))))
+              (when org-db-v3-debug
+                (message "org-db-v3: Health check status: %s" status-line))
+              (prog1
+                  (string-match-p "200 OK" status-line)
+                (kill-buffer))))))
+    (error
+     (when org-db-v3-debug
+       (message "org-db-v3: Server check failed: %S" err))
+     nil)))
 
 ;; Load additional modules
 (require 'org-db-v3-parse)

@@ -56,6 +56,29 @@
             margin-top: 10px;
         }
 
+        .stop-button {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 0.9em;
+            margin-top: 15px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+
+        .stop-button:hover {
+            background: #dc2626;
+        }
+
+        .stop-button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+        }
+
         .content {
             padding: 40px;
         }
@@ -204,6 +227,8 @@
             <h1>org-db v3</h1>
             <p>Semantic Search & Indexing for Org-Mode</p>
             <div class="status" id="status">Server Running</div>
+            <br>
+            <button class="stop-button" id="stop-button" onclick="stopServer()">⏹ Stop Server</button>
         </header>
 
         <div class="content">
@@ -498,6 +523,51 @@
 
         // Refresh stats every 10 seconds
         setInterval(loadStats, 10000);
+
+        // Stop server function
+        async function stopServer() {
+            const button = document.getElementById('stop-button');
+            const status = document.getElementById('status');
+
+            if (!confirm('Are you sure you want to stop the server? This will close all connections.')) {
+                return;
+            }
+
+            try {
+                button.disabled = true;
+                button.textContent = '⏹ Stopping...';
+                status.textContent = 'Shutting down...';
+                status.style.background = '#f59e0b';
+
+                const response = await fetch('/api/shutdown', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (response.ok) {
+                    status.textContent = 'Server stopped';
+                    status.style.background = '#6b7280';
+                    button.textContent = '⏹ Stopped';
+
+                    // Show message after delay
+                    setTimeout(() => {
+                        alert('Server has been stopped. You can close this window.');
+                    }, 1000);
+                }
+            } catch (error) {
+                console.error('Error stopping server:', error);
+                button.textContent = '⏹ Stop Server';
+                button.disabled = false;
+                status.textContent = 'Server stopped (connection lost)';
+                status.style.background = '#6b7280';
+
+                setTimeout(() => {
+                    alert('Server has been stopped. You can close this window.');
+                }, 500);
+            }
+        }
     </script>
 </body>
 </html>

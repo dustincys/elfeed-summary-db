@@ -14,7 +14,7 @@ A modern org-mode database with semantic search capabilities. Built with a hybri
 - *Headline Search* :: Browse and jump to org headlines across all files
 - *Scoped Search* :: Limit searches to specific directories, projects (Projectile), or keyword/tags
 - *Agenda* :: View TODOs, deadlines, and scheduled items from all indexed files
-- *Non-blocking Indexing* :: Queue-based indexing with idle timers keeps Emacs responsive
+- *Non-blocking Indexing* :: Queue-based indexing with configurable delays keeps Emacs responsive
 - *Transient UI* :: Easy-to-use menu system for all commands (=H-v= or =M-x org-db=)
 - *Web Interface* :: Browse statistics and documentation via browser
 
@@ -110,7 +110,7 @@ Or manually:
 M-x org-db-v3-index-directory
 #+END_SRC
 
-Files are processed one at a time using idle timers to keep Emacs responsive.
+Files are processed one at a time with configurable delays to keep Emacs responsive.
 
 ** 4. Search
 
@@ -257,6 +257,11 @@ In the =*org-db search*= buffer:
 
 ;; Auto-start server
 (setq org-db-v3-auto-start-server t)
+
+;; Indexing speed (seconds between files)
+;; Lower = faster indexing but less responsive Emacs
+;; Higher = slower indexing but more responsive Emacs
+(setq org-db-v3-index-delay 0.05)  ; default: 50ms (~20 files/sec)
 
 ;; Search defaults
 (setq org-db-v3-search-default-limit 10)
@@ -479,11 +484,12 @@ org-db-v3/
 
 Directory indexing uses a queue-based approach:
 - Files are collected upfront
-- Idle timer processes one file per tick (0.05s)
+- Regular timer processes one file at configurable intervals (default: 50ms)
 - Local/directory variables are suppressed for safety
 - Already-open buffers are preserved
 - Progress shown in echo area
 - Cancellable with =M-x org-db-v3-cancel-indexing=
+- Speed tunable via =org-db-v3-index-delay= (lower = faster, higher = more responsive)
 
 ** Search Pipeline
 
@@ -538,6 +544,18 @@ Check if port 8765 is already in use:
 lsof -i :8765
 #+END_SRC
 
+The server includes automatic protection against multiple starts:
+- Detects if port is already in use
+- Identifies zombie/stuck processes
+- Offers to automatically clean them up (when started manually)
+- Auto-cleans zombies when auto-starting
+- Fast health checks (1 second timeout) prevent hanging
+
+If you see "Address already in use" errors:
+1. Try =M-x org-db-v3-start-server= - it will prompt to kill zombies
+2. Or manually: =M-x org-db-v3-kill-zombie-processes=
+3. Or restart Emacs (auto-start will clean up zombies)
+
 Change port in both Python and Emacs config if needed.
 
 ** 404 errors when indexing
@@ -557,6 +575,14 @@ Or restart Emacs.
 2. Ensure embeddings generated: Look for =embedding_service= in logs
 3. Check database size: Visit web interface (=W= in menu)
 4. Try reindexing: Press =r= in menu
+
+** Indexing is slow or requires keypresses
+
+If indexing appears to pause between files:
+
+1. Ensure you have the latest code (uses regular timers, not idle timers)
+2. Check/adjust indexing speed: =(setq org-db-v3-index-delay 0.05)= (or lower for faster)
+3. Reload code: =M-x load-file RET reload.el RET=
 
 ** Indexing hangs or blocks Emacs
 
@@ -601,6 +627,9 @@ uv run python -c "import org_db_server"
 - [X] Auto-indexing on save
 - [X] Full file paths in search results
 - [X] Auto-enable for already-open buffers
+- [X] Server startup protection (prevents multiple servers, auto-cleans zombies)
+- [X] Fast health checks with short timeouts
+- [X] Configurable indexing speed
 
 * Future Enhancements
 

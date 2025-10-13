@@ -35,7 +35,7 @@ class KeywordData(BaseModel):
 
 class SrcBlockData(BaseModel):
     """Source block data from Emacs."""
-    language: str
+    language: Optional[str] = None
     contents: str
     begin: int
 

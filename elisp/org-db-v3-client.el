@@ -24,6 +24,13 @@
 (defvar org-db-v3-index-processed 0
   "Number of files processed in current indexing operation.")
 
+(defcustom org-db-v3-index-delay 0.05
+  "Delay in seconds between indexing files.
+Lower values = faster indexing but less responsive Emacs.
+Higher values = slower indexing but more responsive Emacs."
+  :type 'number
+  :group 'org-db-v3)
+
 (defun org-db-v3-index-file-async (filename)
   "Index FILENAME asynchronously by sending to server.
 Disables local variables and hooks for safe and fast bulk indexing."
@@ -81,7 +88,7 @@ Disables local variables and hooks for safe and fast bulk indexing."
 ;;;###autoload
 (defun org-db-v3-index-directory (directory)
   "Recursively index all org files in DIRECTORY.
-Files are processed one at a time using idle timers to keep Emacs responsive."
+Files are processed one at a time using timers to keep Emacs responsive."
   (interactive "DDirectory to index: ")
   (let* ((org-files (directory-files-recursively
                      directory
@@ -106,9 +113,11 @@ Files are processed one at a time using idle timers to keep Emacs responsive."
               org-db-v3-index-total count
               org-db-v3-index-processed 0)
 
-        ;; Start processing with idle timer (0.1 second idle, repeats every 0.05 seconds)
+        ;; Start processing with regular timer
         (setq org-db-v3-index-timer
-              (run-with-idle-timer 0.1 0.05 #'org-db-v3-process-index-queue))
+              (run-with-timer org-db-v3-index-delay
+                             org-db-v3-index-delay
+                             #'org-db-v3-process-index-queue))
 
         (message "Starting non-blocking indexing of %d file%s..."
                  count
@@ -170,9 +179,11 @@ Uses non-blocking queue processing to keep Emacs responsive."
                             org-db-v3-index-total (length existing-files)
                             org-db-v3-index-processed 0)
 
-                      ;; Start processing with idle timer
+                      ;; Start processing with regular timer
                       (setq org-db-v3-index-timer
-                            (run-with-idle-timer 0.1 0.05 #'org-db-v3-process-index-queue))
+                            (run-with-timer org-db-v3-index-delay
+                                           org-db-v3-index-delay
+                                           #'org-db-v3-process-index-queue))
 
                       (message "Starting non-blocking reindex of %d file%s..."
                                (length existing-files)

@@ -52,6 +52,15 @@ Returns plist with :filename_pattern and/or :keyword."
      (list :keyword (cdr org-db-v3-search-scope)))
     (_ nil)))
 
+;; Transient infix for all files scope
+(transient-define-infix org-db-v3--scope-all-infix ()
+  "Set search scope to all files."
+  :class 'transient-lisp-variable
+  :variable 'org-db-v3-search-scope
+  :key "-a"
+  :description "All files"
+  :reader (lambda (&rest _) '(all . nil)))
+
 ;; Transient infix for directory scope
 (transient-define-infix org-db-v3--scope-directory-infix ()
   "Set search scope to a directory."
@@ -108,10 +117,7 @@ Returns plist with :filename_pattern and/or :keyword."
   [:description (lambda () (format "org-db v3 [Scope: %s]" (org-db-v3--scope-description)))
    "Search and manage your org files."]
   [["Scope"
-    ("-a" "All files"
-     :class transient-lisp-variable
-     :variable org-db-v3-search-scope
-     :reader (lambda (&rest _) '(all . nil)))
+    ("-a" org-db-v3--scope-all-infix)
     ("-d" org-db-v3--scope-directory-infix)
     ("-p" org-db-v3--scope-project-infix)
     ("-t" org-db-v3--scope-tag-infix)]

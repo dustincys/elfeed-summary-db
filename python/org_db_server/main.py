@@ -1,4 +1,6 @@
 """FastAPI server for org-db v3."""
+import os
+import signal
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
@@ -27,6 +29,13 @@ app.include_router(agenda.router)
 async def health_check():
     """Health check endpoint."""
     return {"status": "ok", "version": "0.1.0"}
+
+@app.post("/api/shutdown")
+async def shutdown():
+    """Shutdown the server gracefully."""
+    # Send SIGTERM to the parent process group
+    os.kill(os.getpid(), signal.SIGTERM)
+    return {"status": "shutting down"}
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
