@@ -50,7 +50,6 @@ class DoclingService:
 
     def __init__(self):
         """Initialize the document conversion service."""
-        self._markitdown = None  # Lazy load
         logger.info("DoclingService initialized (priority: pymupdf4llm/python-docx/python-pptx, fallback: markitdown)")
 
     @staticmethod
@@ -272,26 +271,36 @@ class DoclingService:
         md5: str,
         file_size: int
     ) -> Dict[str, Any]:
-        """Convert file using markitdown (fallback for various formats)."""
+        """Convert file using markitdown (fallback for various formats).
+
+        Creates a fresh MarkItDown instance for each conversion to avoid
+        memory leaks from multiprocessing (ASR for audio files).
+        """
         try:
-            # Lazy load markitdown
-            if self._markitdown is None:
-                from markitdown import MarkItDown
-                self._markitdown = MarkItDown()
+            from markitdown import MarkItDown
+            import gc
 
             ext = Path(file_path).suffix.lower()
             logger.info(f"Converting {ext} file {file_path} with markitdown...")
 
-            result = self._markitdown.convert(file_path)
-            markdown_text = result.text_content
+            # Create fresh instance for each conversion to avoid resource leaks
+            md_converter = MarkItDown()
 
-            logger.info(f"Successfully converted {file_path} ({len(markdown_text)} chars)")
-            return {
-                "status": "success",
-                "markdown": markdown_text,
-                "md5": md5,
-                "file_size": file_size
-            }
+            try:
+                result = md_converter.convert(file_path)
+                markdown_text = result.text_content
+
+                logger.info(f"Successfully converted {file_path} ({len(markdown_text)} chars)")
+                return {
+                    "status": "success",
+                    "markdown": markdown_text,
+                    "md5": md5,
+                    "file_size": file_size
+                }
+            finally:
+                # Clean up to prevent multiprocessing resource leaks
+                del md_converter
+                gc.collect()
 
         except Exception as e:
             logger.error(f"Error converting {file_path} with markitdown: {e}", exc_info=True)
