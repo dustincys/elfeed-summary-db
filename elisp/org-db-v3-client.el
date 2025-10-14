@@ -78,7 +78,8 @@ Skips Emacs temporary files (.#*, #*#, *~)."
           (kill-buffer buf))))))
 
 (defun org-db-v3-process-index-queue ()
-  "Process one file from the index queue."
+  "Process one file from the index queue.
+Waits for each request to complete before processing the next file."
   (when org-db-v3-index-queue
     (let ((filename (pop org-db-v3-index-queue)))
       (setq org-db-v3-index-processed (1+ org-db-v3-index-processed))
@@ -89,17 +90,65 @@ Skips Emacs temporary files (.#*, #*#, *~)."
                org-db-v3-index-total
                (file-name-nondirectory filename))
 
-      ;; Index the file
-      (org-db-v3-index-file-async filename)
+      ;; Index the file and continue queue on completion
+      (org-db-v3-index-file-with-continuation filename)))
 
-      ;; If queue is empty, clean up
-      (when (null org-db-v3-index-queue)
-        (when org-db-v3-index-timer
-          (cancel-timer org-db-v3-index-timer)
-          (setq org-db-v3-index-timer nil))
-        (message "Indexing complete: %d file%s processed"
-                 org-db-v3-index-total
-                 (if (= org-db-v3-index-total 1) "" "s"))))))
+  ;; If queue is empty, clean up
+  (when (null org-db-v3-index-queue)
+    (when org-db-v3-index-timer
+      (cancel-timer org-db-v3-index-timer)
+      (setq org-db-v3-index-timer nil))
+    (message "Indexing complete: %d file%s processed"
+             org-db-v3-index-total
+             (if (= org-db-v3-index-total 1) "" "s"))))
+
+(defun org-db-v3-index-file-with-continuation (filename)
+  "Index FILENAME and continue processing queue on completion.
+This ensures requests are processed sequentially, not in parallel."
+  (org-db-v3-ensure-server)
+
+  (let ((basename (file-name-nondirectory filename)))
+    ;; Skip Emacs temporary files
+    (when (or (string-prefix-p ".#" basename)
+              (and (string-prefix-p "#" basename)
+                   (string-suffix-p "#" basename))
+              (string-suffix-p "~" basename))
+      (error "Skipping Emacs temporary file: %s" filename)))
+
+  (when (file-exists-p filename)
+    (let ((already-open (find-buffer-visiting filename))
+          buf)
+      ;; Bind these BEFORE opening the file so they take effect during file loading
+      (let ((enable-local-variables nil)  ; Don't evaluate local variables
+            (enable-dir-local-variables nil)  ; Don't evaluate directory-local variables
+            (org-mode-hook '()))  ; Skip org-mode hooks
+        (setq buf (or already-open (find-file-noselect filename))))
+
+      (with-current-buffer buf
+        (let ((json-data (org-db-v3-parse-buffer-to-json)))
+          (plz 'post (concat (org-db-v3-server-url) "/api/file")
+            :headers '(("Content-Type" . "application/json"))
+            :body json-data
+            :as #'json-read
+            :timeout 120  ; Allow time for linked file conversion
+            :then (lambda (response)
+                    (let ((headlines (alist-get 'headlines_count response))
+                          (linked-files (alist-get 'linked_files_count response 0)))
+                      (if (> linked-files 0)
+                          (message "Indexed %s (%d headlines, %d linked file%s)"
+                                   filename headlines linked-files
+                                   (if (= linked-files 1) "" "s"))
+                        (message "Indexed %s (%d headlines)"
+                                 filename headlines)))
+                    ;; Process next file in queue after this one completes
+                    (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))
+            :else (lambda (error)
+                    (message "Error indexing %s: %s" filename error)
+                    ;; Continue with next file even on error
+                    (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))))
+        ;; Kill buffer if it wasn't already open
+        (unless already-open
+          (kill-buffer buf))))))
 
 ;;;###autoload
 (defun org-db-v3-index-directory (directory)
@@ -142,13 +191,11 @@ Files are processed one at a time using timers to keep Emacs responsive."
               org-db-v3-index-total count
               org-db-v3-index-processed 0)
 
-        ;; Start processing with regular timer
-        (setq org-db-v3-index-timer
-              (run-with-timer org-db-v3-index-delay
-                             org-db-v3-index-delay
-                             #'org-db-v3-process-index-queue))
+        ;; Start processing first file (continuation handled in callback)
+        (setq org-db-v3-index-timer t)  ; Marker that indexing is active
+        (run-with-timer 0 nil #'org-db-v3-process-index-queue)
 
-        (message "Starting non-blocking indexing of %d file%s..."
+        (message "Starting sequential indexing of %d file%s..."
                  count
                  (if (= count 1) "" "s"))))))
 
@@ -208,13 +255,11 @@ Uses non-blocking queue processing to keep Emacs responsive."
                             org-db-v3-index-total (length existing-files)
                             org-db-v3-index-processed 0)
 
-                      ;; Start processing with regular timer
-                      (setq org-db-v3-index-timer
-                            (run-with-timer org-db-v3-index-delay
-                                           org-db-v3-index-delay
-                                           #'org-db-v3-process-index-queue))
+                      ;; Start processing first file (continuation handled in callback)
+                      (setq org-db-v3-index-timer t)  ; Marker that indexing is active
+                      (run-with-timer 0 nil #'org-db-v3-process-index-queue)
 
-                      (message "Starting non-blocking reindex of %d file%s..."
+                      (message "Starting sequential reindex of %d file%s..."
                                (length existing-files)
                                (if (= (length existing-files) 1) "" "s"))))))))
     :else (lambda (error)
