@@ -285,7 +285,11 @@ async def fulltext_search(request: FulltextSearchRequest):
 
 @router.post("/images", response_model=ImageSearchResponse)
 async def image_search(request: ImageSearchRequest):
-    """Perform image search using CLIP embeddings with fast vector_top_k()."""
+    """Perform image search using CLIP embeddings.
+
+    Uses exact search for small datasets (<1000 images) and fast vector_top_k()
+    for larger datasets. Exact search is more accurate for small datasets.
+    """
     try:
         # Get CLIP service
         clip_service = get_clip_service()
@@ -293,94 +297,172 @@ async def image_search(request: ImageSearchRequest):
         # Generate text embedding for the query
         query_embedding = clip_service.generate_text_embedding(request.query)
 
-        # Convert query embedding to bytes for libsql
-        query_bytes = query_embedding.astype(np.float32).tobytes()
-
         cursor = db.conn.cursor()
 
-        # Use vector_top_k() for fast approximate nearest neighbor search
-        if request.filename_pattern or request.keyword:
-            # With filters: filter files first
-            filter_query = "SELECT f.rowid FROM files f WHERE 1=1"
-            filter_params = []
+        # Count total images to decide between exact vs ANN search
+        cursor.execute("SELECT COUNT(*) FROM image_embeddings WHERE clip_model = ?",
+                      [clip_service.model_name])
+        total_images = cursor.fetchone()[0]
+
+        # Use exact search for small datasets (more accurate)
+        # Use ANN search for large datasets (much faster)
+        use_exact_search = total_images < 1000
+
+        if use_exact_search:
+            # Exact search: fetch all embeddings and calculate similarities
+            logger.debug(f"Using exact search for {total_images} images")
+
+            # Build query with optional filters
+            base_query = """
+                SELECT
+                    ie.rowid,
+                    ie.embedding_vector,
+                    i.image_path,
+                    f.filename
+                FROM image_embeddings ie
+                JOIN images i ON ie.image_id = i.rowid
+                JOIN files f ON i.filename_id = f.rowid
+            """
+
+            params = [clip_service.model_name]
+            where_clauses = ["ie.clip_model = ?"]
 
             if request.filename_pattern:
-                filter_query += " AND f.filename LIKE ?"
-                filter_params.append(request.filename_pattern)
+                where_clauses.append("f.filename LIKE ?")
+                params.append(request.filename_pattern)
 
             if request.keyword:
-                filter_query += """
-                    AND EXISTS (
-                        SELECT 1 FROM file_keywords fk
-                        JOIN keywords k ON fk.keyword_id = k.rowid
-                        WHERE fk.filename_id = f.rowid AND k.keyword = ?
-                    )
+                base_query += """
+                    JOIN file_keywords fk ON f.rowid = fk.filename_id
+                    JOIN keywords k ON fk.keyword_id = k.rowid
                 """
-                filter_params.append(request.keyword)
+                where_clauses.append("k.keyword = ?")
+                params.append(request.keyword)
 
-            cursor.execute(filter_query, filter_params)
-            matching_file_ids = {row[0] for row in cursor.fetchall()}
+            base_query += " WHERE " + " AND ".join(where_clauses)
+            cursor.execute(base_query, params)
+            rows = cursor.fetchall()
 
-            if not matching_file_ids:
+            if not rows:
                 return ImageSearchResponse(
                     results=[],
                     query=request.query,
                     model_used=clip_service.model_name
                 )
 
-            # Get results from vector search filtered by file IDs
-            cursor.execute("""
-                SELECT
-                    i.image_path,
-                    f.filename,
-                    ie.embedding_vector
-                FROM vector_top_k('idx_image_embeddings_vector', ?, ?) vt
-                JOIN image_embeddings ie ON ie.rowid = vt.id
-                JOIN images i ON ie.image_id = i.rowid
-                JOIN files f ON i.filename_id = f.rowid
-                WHERE ie.clip_model = ? AND f.rowid IN ({})
-            """.format(','.join('?' * len(matching_file_ids))),
-                [query_bytes, request.limit * 2, clip_service.model_name] + list(matching_file_ids)
-            )
-            rows = cursor.fetchall()[:request.limit]
+            # Calculate similarities for all images
+            results_with_scores: List[Tuple[float, str, str]] = []
+            for row in rows:
+                embedding_bytes = row[1]
+                image_path = row[2]
+                filename = row[3]
+
+                stored_embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
+                similarity = clip_service.similarity(query_embedding, stored_embedding)
+                results_with_scores.append((float(similarity), image_path, filename))
+
+            # Sort by similarity (highest first) and take top N
+            results_with_scores.sort(key=lambda x: x[0], reverse=True)
+            top_results = results_with_scores[:request.limit]
+
+            search_results = [
+                ImageSearchResult(
+                    image_path=image_path,
+                    filename=filename,
+                    similarity_score=similarity
+                )
+                for similarity, image_path, filename in top_results
+            ]
+
         else:
-            # No filters: use vector_top_k directly
-            cursor.execute("""
-                SELECT
-                    i.image_path,
-                    f.filename,
-                    ie.embedding_vector
-                FROM vector_top_k('idx_image_embeddings_vector', ?, ?) vt
-                JOIN image_embeddings ie ON ie.rowid = vt.id
-                JOIN images i ON ie.image_id = i.rowid
-                JOIN files f ON i.filename_id = f.rowid
-                WHERE ie.clip_model = ?
-            """, [query_bytes, request.limit, clip_service.model_name])
-            rows = cursor.fetchall()
+            # ANN search: use vector_top_k for large datasets
+            logger.debug(f"Using ANN search for {total_images} images")
 
-        if not rows:
-            return ImageSearchResponse(
-                results=[],
-                query=request.query,
-                model_used=clip_service.model_name
-            )
+            # Convert query embedding to bytes for libsql
+            query_bytes = query_embedding.astype(np.float32).tobytes()
 
-        # Build results from vector_top_k output and calculate similarity
-        search_results = []
-        for row in rows:
-            image_path = row[0]
-            filename = row[1]
-            embedding_bytes = row[2]
+            if request.filename_pattern or request.keyword:
+                # With filters: filter files first
+                filter_query = "SELECT f.rowid FROM files f WHERE 1=1"
+                filter_params = []
 
-            # Calculate cosine similarity
-            stored_embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
-            similarity = float(clip_service.similarity(query_embedding, stored_embedding))
+                if request.filename_pattern:
+                    filter_query += " AND f.filename LIKE ?"
+                    filter_params.append(request.filename_pattern)
 
-            search_results.append(ImageSearchResult(
-                image_path=image_path,
-                filename=filename,
-                similarity_score=similarity
-            ))
+                if request.keyword:
+                    filter_query += """
+                        AND EXISTS (
+                            SELECT 1 FROM file_keywords fk
+                            JOIN keywords k ON fk.keyword_id = k.rowid
+                            WHERE fk.filename_id = f.rowid AND k.keyword = ?
+                        )
+                    """
+                    filter_params.append(request.keyword)
+
+                cursor.execute(filter_query, filter_params)
+                matching_file_ids = {row[0] for row in cursor.fetchall()}
+
+                if not matching_file_ids:
+                    return ImageSearchResponse(
+                        results=[],
+                        query=request.query,
+                        model_used=clip_service.model_name
+                    )
+
+                # Get results from vector search filtered by file IDs
+                cursor.execute("""
+                    SELECT
+                        i.image_path,
+                        f.filename,
+                        ie.embedding_vector
+                    FROM vector_top_k('idx_image_embeddings_vector', ?, ?) vt
+                    JOIN image_embeddings ie ON ie.rowid = vt.id
+                    JOIN images i ON ie.image_id = i.rowid
+                    JOIN files f ON i.filename_id = f.rowid
+                    WHERE ie.clip_model = ? AND f.rowid IN ({})
+                """.format(','.join('?' * len(matching_file_ids))),
+                    [query_bytes, request.limit * 2, clip_service.model_name] + list(matching_file_ids)
+                )
+                rows = cursor.fetchall()[:request.limit]
+            else:
+                # No filters: use vector_top_k directly
+                cursor.execute("""
+                    SELECT
+                        i.image_path,
+                        f.filename,
+                        ie.embedding_vector
+                    FROM vector_top_k('idx_image_embeddings_vector', ?, ?) vt
+                    JOIN image_embeddings ie ON ie.rowid = vt.id
+                    JOIN images i ON ie.image_id = i.rowid
+                    JOIN files f ON i.filename_id = f.rowid
+                    WHERE ie.clip_model = ?
+                """, [query_bytes, request.limit, clip_service.model_name])
+                rows = cursor.fetchall()
+
+            if not rows:
+                return ImageSearchResponse(
+                    results=[],
+                    query=request.query,
+                    model_used=clip_service.model_name
+                )
+
+            # Build results from vector_top_k output and calculate similarity
+            search_results = []
+            for row in rows:
+                image_path = row[0]
+                filename = row[1]
+                embedding_bytes = row[2]
+
+                # Calculate cosine similarity
+                stored_embedding = np.frombuffer(embedding_bytes, dtype=np.float32)
+                similarity = float(clip_service.similarity(query_embedding, stored_embedding))
+
+                search_results.append(ImageSearchResult(
+                    image_path=image_path,
+                    filename=filename,
+                    similarity_score=similarity
+                ))
 
         return ImageSearchResponse(
             results=search_results,
