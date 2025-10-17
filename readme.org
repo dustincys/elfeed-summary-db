@@ -163,9 +163,23 @@ Find images by text description using CLIP embeddings.
 #+BEGIN_SRC emacs-lisp
 M-x org-db-v3-headline-search
 ;; or press 'h' in the menu
+
+;; With prefix arg, choose sort order interactively
+C-u M-x org-db-v3-headline-search
 #+END_SRC
 
 Browse all headlines with completing-read interface.
+
+*Sort Order Options:*
+- =last_updated= :: Most recently updated files first (default)
+- =filename= :: Alphabetical by filename
+- =indexed_at= :: Most recently indexed files first
+
+You can customize the default sort order:
+#+BEGIN_SRC emacs-lisp
+(setq org-db-v3-headline-sort-order "last_updated")  ; default
+;; or "filename" or "indexed_at"
+#+END_SRC
 
 *** Using Search Scope
 
@@ -421,6 +435,10 @@ In the =*org-db search*= buffer:
 ;; Search defaults
 (setq org-db-v3-search-default-limit 10)
 
+;; Headline search sort order
+(setq org-db-v3-headline-sort-order "last_updated")  ; default
+;; Options: "last_updated", "filename", "indexed_at"
+
 ;; Linked file indexing (DISABLED by default due to performance issues)
 (setq org-db-v3-enable-linked-files nil)  ; disabled by default
 ;; (setq org-db-v3-max-linked-file-size 20971520)  ; 20MB limit if enabled
@@ -522,9 +540,12 @@ Content-Type: application/json
 
 {
   "query": "project",
-  "limit": 10
+  "limit": 10,
+  "sort_by": "last_updated"  // optional: "filename", "last_updated", "indexed_at"
 }
 #+END_SRC
+
+Sorts by most recently updated files first by default.
 
 *** Agenda
 #+BEGIN_SRC

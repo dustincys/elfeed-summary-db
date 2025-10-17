@@ -707,7 +707,13 @@ async def headline_search(request: HeadlineSearchRequest):
         if where_clauses:
             base_query += " WHERE " + " AND ".join(where_clauses)
 
-        base_query += " ORDER BY f.filename, h.begin"
+        # Dynamic ORDER BY based on sort_by parameter
+        if request.sort_by == "last_updated":
+            base_query += " ORDER BY f.last_updated DESC, h.begin"
+        elif request.sort_by == "indexed_at":
+            base_query += " ORDER BY f.indexed_at DESC, h.begin"
+        else:  # default to "filename"
+            base_query += " ORDER BY f.filename, h.begin"
 
         # Add LIMIT only if specified
         if request.limit is not None:

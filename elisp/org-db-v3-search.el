@@ -67,6 +67,16 @@ Only used when `org-db-v3-search-use-reranking' is non-nil."
   :type 'integer
   :group 'org-db-v3)
 
+(defcustom org-db-v3-headline-sort-order "last_updated"
+  "Default sort order for headline search results.
+- \"filename\": Sort alphabetically by filename
+- \"last_updated\": Sort by most recently updated files first (default)
+- \"indexed_at\": Sort by most recently indexed files first"
+  :type '(choice (const :tag "By filename (alphabetical)" "filename")
+                 (const :tag "By last updated (most recent first)" "last_updated")
+                 (const :tag "By last indexed (most recent first)" "indexed_at"))
+  :group 'org-db-v3)
+
 ;;;###autoload
 (defun org-db-v3-semantic-search (query &optional limit)
   "Perform semantic search for QUERY.
@@ -889,16 +899,27 @@ CANDIDATE is a string with metadata stored in text properties."
     :sort-fn nil))  ; Keep relevance order from API
 
 ;;;###autoload
-(defun org-db-v3-headline-search ()
+(defun org-db-v3-headline-search (&optional sort-by)
   "Browse all headlines and jump to selection.
-You can filter candidates dynamically using completing-read."
-  (interactive)
+You can filter candidates dynamically using completing-read.
+Optional SORT-BY specifies the sort order:
+  - \"filename\": Sort alphabetically by filename (default)
+  - \"last_updated\": Sort by most recently updated files first
+  - \"indexed_at\": Sort by most recently indexed files first
+With prefix arg, prompt for sort order interactively."
+  (interactive
+   (list (when current-prefix-arg
+           (completing-read "Sort by: "
+                          '("filename" "last_updated" "indexed_at")
+                          nil t nil nil org-db-v3-headline-sort-order))))
 
   (org-db-v3-ensure-server)
 
-  (let* ((scope-params (when (fboundp 'org-db-v3--scope-to-params)
+  (let* ((sort-order (or sort-by org-db-v3-headline-sort-order))
+         (scope-params (when (fboundp 'org-db-v3--scope-to-params)
                          (org-db-v3--scope-to-params)))
-         (request-body (append `((query . ""))
+         (request-body (append `((query . "")
+                                (sort_by . ,sort-order))
                               (when scope-params
                                 (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
                                       (cons 'keyword (plist-get scope-params :keyword)))))))

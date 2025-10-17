@@ -146,6 +146,7 @@ class HeadlineSearchRequest(BaseModel):
     limit: Optional[int] = Field(default=None, ge=1, le=200000, description="Maximum number of results (None = unlimited)")
     filename_pattern: Optional[str] = Field(default=None, description="SQL LIKE pattern for directory/project scope")
     keyword: Optional[str] = Field(default=None, description="Keyword/tag filter")
+    sort_by: str = Field(default="last_updated", description="Sort order: 'filename' (alphabetical), 'last_updated' (most recent first), 'indexed_at' (most recently indexed first)")
 
 class HeadlineSearchResult(BaseModel):
     """Single headline search result."""
