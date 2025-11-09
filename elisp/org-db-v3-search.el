@@ -15,6 +15,11 @@
 (require 'json)
 (require 'org)
 
+;; Declare url-request variables as special for lexical binding compatibility
+(defvar url-request-method)
+(defvar url-request-extra-headers)
+(defvar url-request-data)
+
 ;; Forward declarations
 (declare-function org-db-v3-server-url "org-db-v3")
 (declare-function org-db-v3-ensure-server "org-db-v3")
@@ -292,7 +297,7 @@ Called by ivy as the user types. Returns a list of candidates."
                (message "Semantic search error: %S" err)
                nil))))
 
-      (if (and response (vectorp (alist-get 'results response)))
+      (if (and response (alist-get 'results response))
           (let* ((results (alist-get 'results response))
                  (candidates (if (zerop (length results))
                                 (list (format "No results found for: %s" input))
@@ -677,7 +682,7 @@ Called by ivy as the user types. Returns a list of candidates with thumbnails."
                (message "Image search error: %S" err)
                nil))))
 
-      (if (and response (vectorp (alist-get 'results response)))
+      (if (and response (alist-get 'results response))
           (let* ((results (alist-get 'results response))
                  (candidates (if (zerop (length results))
                                 (list (format "No images found for: %s" input))
@@ -838,7 +843,7 @@ Called by ivy as the user types. Returns a list of candidates."
                (message "Fulltext search error: %S" err)
                nil))))
 
-      (if (and response (vectorp (alist-get 'results response)))
+      (if (and response (alist-get 'results response))
           (let* ((results (alist-get 'results response))
                  (candidates (if (zerop (length results))
                                 (list (format "No results found for: %s" input))
