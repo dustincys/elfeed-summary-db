@@ -11,7 +11,7 @@ class CLIPService:
     def __init__(self, model_name: str = "clip-ViT-B-32"):
         """Initialize with a CLIP model from Sentence Transformers."""
         self.model_name = model_name
-        self.model = SentenceTransformer(model_name)
+        self.model = SentenceTransformer("/home/dustin/llm/" + model_name)
         # Get embedding dimension from the model
         self.dimension = self.model.get_sentence_embedding_dimension()
 

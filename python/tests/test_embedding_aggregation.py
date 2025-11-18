@@ -23,7 +23,7 @@ def demonstrate_aggregation():
 
     # Load model (same as your server uses)
     print("\nLoading model: all-MiniLM-L6-v2...")
-    model = SentenceTransformer('all-MiniLM-L6-v2')
+    model = SentenceTransformer("/home/dustin/llm/" + 'all-MiniLM-L6-v2')
     print("✓ Model loaded (384 dimensions)")
 
     # Test document chunks

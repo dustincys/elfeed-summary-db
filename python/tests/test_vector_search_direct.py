@@ -32,7 +32,7 @@ for idx in indexes:
 
 # Generate embedding for "mushroom"
 print("\nGenerating embedding for 'mushroom'...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
+model = SentenceTransformer("/home/dustin/llm/" + 'all-MiniLM-L6-v2')
 query_embedding = model.encode("mushroom")
 print(f"  Embedding shape: {query_embedding.shape}")
 print(f"  Embedding dtype: {query_embedding.dtype}")
