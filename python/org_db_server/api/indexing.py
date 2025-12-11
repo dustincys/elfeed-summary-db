@@ -1,21 +1,22 @@
 """Indexing API endpoints."""
-from fastapi import APIRouter, HTTPException
-from datetime import datetime
-from typing import List, Dict, Any
-import psutil
-import os
-
-from org_db_server.models.schemas import IndexFileRequest, IndexFileResponse
-from org_db_server.services.database import Database
-from org_db_server.services.chunking import chunk_text
-from org_db_server.services.embeddings import get_embedding_service
-from org_db_server.services.clip_service import get_clip_service
-from org_db_server.services.document_converter import get_document_converter
-from org_db_server.config import settings
-from pathlib import Path
 import logging
+import os
+from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List
+
+import psutil
+from fastapi import APIRouter, HTTPException
+from org_db_server.config import settings
+from org_db_server.models.schemas import IndexFileRequest, IndexFileResponse
+from org_db_server.services.chunking import chunk_text
+from org_db_server.services.clip_service import get_clip_service
+from org_db_server.services.database import Database
+from org_db_server.services.document_converter import get_document_converter
+from org_db_server.services.embeddings import get_embedding_service
 
 logger = logging.getLogger(__name__)
+
 
 def log_memory_usage(context: str = ""):
     """Log current memory usage for debugging."""
@@ -34,27 +35,29 @@ def log_memory_usage(context: str = ""):
     except Exception as e:
         logger.warning(f"Could not get memory info: {e}")
 
+
 router = APIRouter(prefix="/api", tags=["indexing"])
 
 # Global database instance (will be improved later with dependency injection)
-db = Database(settings.db_path, settings.semantic_db_path, settings.image_db_path)
+db = Database(settings.db_path, settings.semantic_db_path,
+              settings.image_db_path)
+
 
 @router.get("/files")
 async def get_files() -> Dict[str, Any]:
     """Get list of all files in the database."""
     try:
         cursor = db.main_conn.cursor()
-        cursor.execute("SELECT filename, indexed_at FROM files ORDER BY indexed_at DESC")
+        cursor.execute(
+            "SELECT filename, indexed_at FROM files ORDER BY indexed_at DESC")
         rows = cursor.fetchall()
 
-        files = [
-            {"filename": row[0], "indexed_at": row[1]}
-            for row in rows
-        ]
+        files = [{"filename": row[0], "indexed_at": row[1]} for row in rows]
 
         return {"files": files}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.delete("/file")
 async def delete_file(filename: str) -> Dict[str, Any]:
@@ -62,30 +65,35 @@ async def delete_file(filename: str) -> Dict[str, Any]:
     try:
         # Delete from main database (metadata)
         cursor = db.main_conn.cursor()
-        cursor.execute("SELECT rowid FROM files WHERE filename = ?", (filename,))
+        cursor.execute("SELECT rowid FROM files WHERE filename = ?",
+                       (filename, ))
         row = cursor.fetchone()
 
         if not row:
-            raise HTTPException(status_code=404, detail=f"File not found: {filename}")
+            raise HTTPException(status_code=404,
+                                detail=f"File not found: {filename}")
 
         file_id = row[0]
-        cursor.execute("DELETE FROM files WHERE rowid = ?", (file_id,))
+        cursor.execute("DELETE FROM files WHERE rowid = ?", (file_id, ))
         db.main_conn.commit()
 
         # Delete from semantic database (chunks and embeddings)
         cursor = db.semantic_conn.cursor()
-        cursor.execute("DELETE FROM chunks WHERE filename = ?", (filename,))
+        cursor.execute("DELETE FROM chunks WHERE filename = ?", (filename, ))
         db.semantic_conn.commit()
 
         # Delete from image database (images and embeddings)
         cursor = db.image_conn.cursor()
-        cursor.execute("DELETE FROM images WHERE filename = ?", (filename,))
+        cursor.execute("DELETE FROM images WHERE filename = ?", (filename, ))
         db.image_conn.commit()
 
         return {
-            "status": "deleted",
-            "filename": filename,
-            "message": f"Successfully deleted {filename} and all associated data from all databases"
+            "status":
+            "deleted",
+            "filename":
+            filename,
+            "message":
+            f"Successfully deleted {filename} and all associated data from all databases"
         }
     except HTTPException:
         raise
@@ -94,6 +102,7 @@ async def delete_file(filename: str) -> Dict[str, Any]:
         db.semantic_conn.rollback()
         db.image_conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.post("/file", response_model=IndexFileResponse)
 async def index_file(request: IndexFileRequest):
@@ -109,19 +118,19 @@ async def index_file(request: IndexFileRequest):
         logger.info(f"  Linked files: {len(request.linked_files)}")
 
         # Get or create file entry
-        file_id = db.get_or_create_file_id(
-            request.filename,
-            request.md5,
-            request.file_size
-        )
+        file_id = db.get_or_create_file_id(request.filename, request.md5,
+                                           request.file_size)
 
         cursor = db.main_conn.cursor()
 
         # Delete existing data for this file (we'll re-index everything)
-        cursor.execute("DELETE FROM headlines WHERE filename_id = ?", (file_id,))
-        cursor.execute("DELETE FROM links WHERE filename_id = ?", (file_id,))
-        cursor.execute("DELETE FROM file_keywords WHERE filename_id = ?", (file_id,))
-        cursor.execute("DELETE FROM src_blocks WHERE filename_id = ?", (file_id,))
+        cursor.execute("DELETE FROM headlines WHERE filename_id = ?",
+                       (file_id, ))
+        cursor.execute("DELETE FROM links WHERE filename_id = ?", (file_id, ))
+        cursor.execute("DELETE FROM file_keywords WHERE filename_id = ?",
+                       (file_id, ))
+        cursor.execute("DELETE FROM src_blocks WHERE filename_id = ?",
+                       (file_id, ))
 
         # Insert headlines
         for hl in request.headlines:
@@ -131,61 +140,63 @@ async def index_file(request: IndexFileRequest):
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (file_id, hl.title, hl.level, hl.todo_keyword, hl.todo_type,
                  hl.archivedp, hl.commentedp, hl.begin, hl.end, hl.tags,
-                 hl.priority, hl.scheduled, hl.deadline)
-            )
+                 hl.priority, hl.scheduled, hl.deadline))
             headline_id = cursor.lastrowid
 
             # Insert properties if any
             if hl.properties:
                 for prop_key, prop_value in hl.properties.items():
                     # Get or create property
-                    cursor.execute("SELECT rowid FROM properties WHERE property = ?", (prop_key,))
+                    cursor.execute(
+                        "SELECT rowid FROM properties WHERE property = ?",
+                        (prop_key, ))
                     prop_row = cursor.fetchone()
 
                     if prop_row:
                         property_id = prop_row[0]
                     else:
-                        cursor.execute("INSERT INTO properties (property) VALUES (?)", (prop_key,))
+                        cursor.execute(
+                            "INSERT INTO properties (property) VALUES (?)",
+                            (prop_key, ))
                         property_id = cursor.lastrowid
 
                     # Insert headline property
                     cursor.execute(
                         "INSERT INTO headline_properties (headline_id, property_id, value) VALUES (?, ?, ?)",
-                        (headline_id, property_id, prop_value)
-                    )
+                        (headline_id, property_id, prop_value))
 
         # Insert links
         for link in request.links:
             cursor.execute(
                 """INSERT INTO links (filename_id, type, path, raw_link, description, search_option, begin)
                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (file_id, link.type, link.path, link.raw_link, link.description, link.search_option, link.begin)
-            )
+                (file_id, link.type, link.path, link.raw_link,
+                 link.description, link.search_option, link.begin))
 
         # Insert keywords
         for kw in request.keywords:
             # Get or create keyword
-            cursor.execute("SELECT rowid FROM keywords WHERE keyword = ?", (kw.key,))
+            cursor.execute("SELECT rowid FROM keywords WHERE keyword = ?",
+                           (kw.key, ))
             kw_row = cursor.fetchone()
 
             if kw_row:
                 keyword_id = kw_row[0]
             else:
-                cursor.execute("INSERT INTO keywords (keyword) VALUES (?)", (kw.key,))
+                cursor.execute("INSERT INTO keywords (keyword) VALUES (?)",
+                               (kw.key, ))
                 keyword_id = cursor.lastrowid
 
             # Insert file keyword
             cursor.execute(
                 "INSERT INTO file_keywords (filename_id, keyword_id, value, begin) VALUES (?, ?, ?, ?)",
-                (file_id, keyword_id, kw.value, kw.begin)
-            )
+                (file_id, keyword_id, kw.value, kw.begin))
 
         # Insert src blocks
         for src in request.src_blocks:
             cursor.execute(
                 "INSERT INTO src_blocks (filename_id, language, contents, begin) VALUES (?, ?, ?, ?)",
-                (file_id, src.language, src.contents, src.begin)
-            )
+                (file_id, src.language, src.contents, src.begin))
 
         # Generate chunks from full file content for semantic search
         if request.content:
@@ -193,23 +204,25 @@ async def index_file(request: IndexFileRequest):
 
             # Chunk the full content with proper line tracking
             # Use configurable method and size (default: fixed chunks to reduce bloat)
-            all_chunks = chunk_text(
-                request.content,
-                method=settings.org_chunk_method,
-                chunk_size=settings.org_chunk_size,
-                chunk_overlap=settings.org_chunk_overlap
-            )
+            all_chunks = chunk_text(request.content,
+                                    method=settings.org_chunk_method,
+                                    chunk_size=settings.org_chunk_size,
+                                    chunk_overlap=settings.org_chunk_overlap)
 
             # Generate embeddings
             if all_chunks:
-                log_memory_usage(f"before embeddings for {len(all_chunks)} org chunks")
+                log_memory_usage(
+                    f"before embeddings for {len(all_chunks)} org chunks")
                 embedding_service = get_embedding_service()
                 chunk_texts = [c["text"] for c in all_chunks]
                 embeddings = embedding_service.generate_embeddings(chunk_texts)
 
-                log_memory_usage(f"after embeddings, before storing {len(all_chunks)} org chunks")
+                log_memory_usage(
+                    f"after embeddings, before storing {len(all_chunks)} org chunks"
+                )
                 # Store chunks and embeddings (semantic DB uses filename not file_id)
-                db.store_chunks(request.filename, all_chunks, embeddings, embedding_service.model_name)
+                db.store_chunks(request.filename, all_chunks, embeddings,
+                                embedding_service.model_name)
                 log_memory_usage("after storing org chunks")
 
         # Populate FTS5 table with entire file content
@@ -226,28 +239,39 @@ async def index_file(request: IndexFileRequest):
                 # Resolve image path relative to org file
                 org_dir = Path(request.filename).parent
                 img_path = org_dir / img.path
-                print(f"DEBUG: Resolved path: {img_path}, exists={img_path.exists()}")
+                print(
+                    f"DEBUG: Resolved path: {img_path}, exists={img_path.exists()}"
+                )
 
                 if img_path.exists() and img_path.is_file():
                     try:
-                        images_data.append({"path": str(img_path), "begin": img.begin})
+                        images_data.append({
+                            "path": str(img_path),
+                            "begin": img.begin
+                        })
                         print(f"DEBUG: Added image to process: {img_path}")
                     except Exception as e:
                         print(f"Error preparing image {img_path}: {e}")
                 else:
-                    print(f"DEBUG: Image file not found or not a file: {img_path}")
+                    print(
+                        f"DEBUG: Image file not found or not a file: {img_path}"
+                    )
 
             # Generate CLIP embeddings for valid images
             if images_data:
-                print(f"DEBUG: Generating CLIP embeddings for {len(images_data)} images")
+                print(
+                    f"DEBUG: Generating CLIP embeddings for {len(images_data)} images"
+                )
                 try:
                     clip_service = get_clip_service()
                     image_paths = [img["path"] for img in images_data]
-                    embeddings = clip_service.generate_image_embeddings(image_paths)
+                    embeddings = clip_service.generate_image_embeddings(
+                        image_paths)
                     print(f"DEBUG: Generated {len(embeddings)} embeddings")
 
                     # Store images and embeddings (image DB uses filename not file_id)
-                    db.store_images(request.filename, images_data, embeddings, clip_service.model_name)
+                    db.store_images(request.filename, images_data, embeddings,
+                                    clip_service.model_name)
                     print(f"DEBUG: Successfully stored images and embeddings")
                 except Exception as e:
                     print(f"Error generating CLIP embeddings: {e}")
@@ -255,17 +279,23 @@ async def index_file(request: IndexFileRequest):
                     traceback.print_exc()
                     # Continue without image embeddings
             else:
-                print(f"DEBUG: No valid images to process after path resolution")
+                print(
+                    f"DEBUG: No valid images to process after path resolution")
 
         # Process linked files (PDF, DOCX, etc.)
         linked_files_indexed = 0
 
         if request.linked_files and not settings.enable_linked_files:
-            logger.info(f"Skipping {len(request.linked_files)} linked files (feature disabled)")
+            logger.info(
+                f"Skipping {len(request.linked_files)} linked files (feature disabled)"
+            )
 
         if request.linked_files and settings.enable_linked_files:
-            log_memory_usage(f"before processing {len(request.linked_files)} linked files")
-            logger.info(f"Processing {len(request.linked_files)} linked files for {request.filename}")
+            log_memory_usage(
+                f"before processing {len(request.linked_files)} linked files")
+            logger.info(
+                f"Processing {len(request.linked_files)} linked files for {request.filename}"
+            )
             converter = get_document_converter()
             # Initialize embedding service for linked files
             embedding_service = get_embedding_service()
@@ -278,19 +308,27 @@ async def index_file(request: IndexFileRequest):
                     # Check file size limit before processing
                     if settings.max_linked_file_size_mb > 0:
                         try:
-                            file_size_mb = Path(file_path).stat().st_size / (1024 * 1024)
+                            file_size_mb = Path(file_path).stat().st_size / (
+                                1024 * 1024)
                             if file_size_mb > settings.max_linked_file_size_mb:
-                                logger.info(f"Skipping {file_path}: too large ({file_size_mb:.1f} MB > {settings.max_linked_file_size_mb} MB limit)")
+                                logger.info(
+                                    f"Skipping {file_path}: too large ({file_size_mb:.1f} MB > {settings.max_linked_file_size_mb} MB limit)"
+                                )
                                 continue
                         except Exception as e:
-                            logger.warning(f"Could not check file size for {file_path}: {e}")
+                            logger.warning(
+                                f"Could not check file size for {file_path}: {e}"
+                            )
 
-                    log_memory_usage(f"before converting linked file {idx}/{len(request.linked_files)}: {Path(file_path).name}")
+                    log_memory_usage(
+                        f"before converting linked file {idx}/{len(request.linked_files)}: {Path(file_path).name}"
+                    )
                     logger.info(f"Converting linked file: {file_path}")
 
                     # Convert file to markdown (audio files skipped by default)
                     conversion = converter.convert_to_markdown(file_path)
-                    log_memory_usage(f"after converting {Path(file_path).name}")
+                    log_memory_usage(
+                        f"after converting {Path(file_path).name}")
 
                     # Determine file type
                     file_type = Path(file_path).suffix.lstrip('.')
@@ -307,18 +345,20 @@ async def index_file(request: IndexFileRequest):
                             file_size=conversion.get('file_size', 0),
                             md5=conversion.get('md5', ''),
                             conversion_status=conversion['status'],
-                            conversion_error=conversion.get('error')
-                        )
+                            conversion_error=conversion.get('error'))
                     elif conversion['status'] == 'skipped':
                         # For skipped files, we don't create a linked_file entry
-                        logger.info(f"Skipped file {file_path}, not creating linked_file entry: {conversion.get('error')}")
+                        logger.info(
+                            f"Skipped file {file_path}, not creating linked_file entry: {conversion.get('error')}"
+                        )
                         continue  # Skip to next file
 
                     # If conversion succeeded, chunk and index
                     if conversion['status'] == 'success':
                         markdown = conversion['markdown']
 
-                        log_memory_usage(f"before chunking {Path(file_path).name}")
+                        log_memory_usage(
+                            f"before chunking {Path(file_path).name}")
                         # Chunk the markdown - use larger fixed chunks for linked files to reduce bloat
                         # paragraph method creates too many chunks (one per paragraph)
                         # fixed method with larger size creates fewer, more efficient chunks
@@ -326,21 +366,30 @@ async def index_file(request: IndexFileRequest):
                             markdown,
                             method="fixed",
                             chunk_size=settings.linked_file_chunk_size,
-                            chunk_overlap=settings.linked_file_chunk_overlap
-                        )
+                            chunk_overlap=settings.linked_file_chunk_overlap)
 
                         # Limit number of chunks per file to prevent bloat
-                        if settings.max_linked_file_chunks > 0 and len(chunk_results) > settings.max_linked_file_chunks:
-                            logger.info(f"Limiting {file_path} from {len(chunk_results)} to {settings.max_linked_file_chunks} chunks")
-                            chunk_results = chunk_results[:settings.max_linked_file_chunks]
+                        if settings.max_linked_file_chunks > 0 and len(
+                                chunk_results
+                        ) > settings.max_linked_file_chunks:
+                            logger.info(
+                                f"Limiting {file_path} from {len(chunk_results)} to {settings.max_linked_file_chunks} chunks"
+                            )
+                            chunk_results = chunk_results[:settings.
+                                                          max_linked_file_chunks]
 
                         if chunk_results:
-                            log_memory_usage(f"before embeddings for {len(chunk_results)} linked file chunks from {Path(file_path).name}")
+                            log_memory_usage(
+                                f"before embeddings for {len(chunk_results)} linked file chunks from {Path(file_path).name}"
+                            )
                             # Generate embeddings
                             texts = [c['text'] for c in chunk_results]
-                            embeddings = embedding_service.generate_embeddings(texts)
+                            embeddings = embedding_service.generate_embeddings(
+                                texts)
 
-                            log_memory_usage(f"after embeddings, before storing linked file chunks from {Path(file_path).name}")
+                            log_memory_usage(
+                                f"after embeddings, before storing linked file chunks from {Path(file_path).name}"
+                            )
                             # Store chunks (semantic DB uses filename not file_id)
                             db.store_linked_file_chunks(
                                 org_filename=request.filename,
@@ -348,20 +397,30 @@ async def index_file(request: IndexFileRequest):
                                 linked_file_path=file_path,
                                 chunks=chunk_results,
                                 embeddings=embeddings,
-                                model_name=embedding_service.model_name
-                            )
+                                model_name=embedding_service.model_name)
 
                             linked_files_indexed += 1
-                            log_memory_usage(f"after indexing linked file {idx}/{len(request.linked_files)}: {Path(file_path).name}")
-                            logger.info(f"Indexed linked file: {file_path} ({len(chunk_results)} chunks)")
+                            log_memory_usage(
+                                f"after indexing linked file {idx}/{len(request.linked_files)}: {Path(file_path).name}"
+                            )
+                            logger.info(
+                                f"Indexed linked file: {file_path} ({len(chunk_results)} chunks)"
+                            )
                         else:
-                            logger.warning(f"No chunks generated for {file_path}")
+                            logger.warning(
+                                f"No chunks generated for {file_path}")
                     else:
-                        logger.warning(f"Conversion failed for {file_path}: {conversion.get('error')}")
+                        logger.warning(
+                            f"Conversion failed for {file_path}: {conversion.get('error')}"
+                        )
 
                 except Exception as e:
-                    logger.error(f"Error processing linked file {linked_file.file_path}: {e}", exc_info=True)
-                    log_memory_usage(f"after error processing {Path(linked_file.file_path).name}")
+                    logger.error(
+                        f"Error processing linked file {linked_file.file_path}: {e}",
+                        exc_info=True)
+                    log_memory_usage(
+                        f"after error processing {Path(linked_file.file_path).name}"
+                    )
                     # Continue with other files
 
             # Force garbage collection after processing all linked files
@@ -377,13 +436,11 @@ async def index_file(request: IndexFileRequest):
         import gc
         gc.collect()
 
-        return IndexFileResponse(
-            file_id=file_id,
-            status="indexed",
-            headlines_count=len(request.headlines),
-            links_count=len(request.links),
-            linked_files_count=linked_files_indexed
-        )
+        return IndexFileResponse(file_id=file_id,
+                                 status="indexed",
+                                 headlines_count=len(request.headlines),
+                                 links_count=len(request.links),
+                                 linked_files_count=linked_files_indexed)
 
     except Exception as e:
         db.main_conn.rollback()
