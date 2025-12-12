@@ -1,29 +1,29 @@
 """Search API endpoints."""
-from fastapi import APIRouter, HTTPException
-import numpy as np
 import logging
 import textwrap
 from typing import List, Tuple
 
+import numpy as np
+from fastapi import APIRouter, HTTPException
+
 logger = logging.getLogger(__name__)
 
-from org_db_server.models.schemas import (
-    SemanticSearchRequest, SemanticSearchResponse, SearchResult,
-    FulltextSearchRequest, FulltextSearchResponse, FulltextSearchResult,
-    ImageSearchRequest, ImageSearchResponse, ImageSearchResult,
-    HeadlineSearchRequest, HeadlineSearchResponse, HeadlineSearchResult,
-    PropertySearchRequest, PropertySearchResponse, PropertySearchResult
-)
-from org_db_server.services.database import Database
-from org_db_server.services.embeddings import get_embedding_service
-from org_db_server.services.clip_service import get_clip_service
-from org_db_server.services.reranker import get_reranker_service
-from org_db_server.config import settings
+from elfeed_summary_db_server.config import settings
+from elfeed_summary_db_server.models.schemas import (FulltextSearchRequest,
+                                                     FulltextSearchResponse,
+                                                     FulltextSearchResult,
+                                                     SearchResult,
+                                                     SemanticSearchRequest,
+                                                     SemanticSearchResponse)
+from elfeed_summary_db_server.services.clip_service import get_clip_service
+from elfeed_summary_db_server.services.database import Database
+from elfeed_summary_db_server.services.embeddings import get_embedding_service
+from elfeed_summary_db_server.services.reranker import get_reranker_service
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
 # Global database instance
-db = Database(settings.db_path, settings.semantic_db_path, settings.image_db_path)
+db = Database(settings.db_path, settings.semantic_db_path)
 
 def wrap_snippet(snippet: str, width: int = 80) -> str:
     """Wrap snippet text to specified width while preserving match markers.

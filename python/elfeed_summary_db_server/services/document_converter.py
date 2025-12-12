@@ -1,8 +1,8 @@
 """Service for converting linked files to markdown using lightweight libraries."""
-import logging
 import hashlib
+import logging
 from pathlib import Path
-from typing import Optional, Dict, Any
+from typing import Any, Dict, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class DocumentConverter:
 
     # Priority formats (use specialized libraries)
     PRIORITY_EXTENSIONS = {
-        '.pdf',   # pymupdf4llm (fastest for PDFs)
+        '.pdf',  # pymupdf4llm (fastest for PDFs)
         '.docx',  # python-docx (fastest for Word)
         '.pptx',  # python-pptx (fastest for PowerPoint)
     }
@@ -37,14 +37,23 @@ class DocumentConverter:
 
     # Supported via markitdown (fallback)
     MARKITDOWN_EXTENSIONS = {
-        '.xlsx', '.xls', '.csv',  # Excel/spreadsheets
-        '.html', '.htm',          # Web pages
-        '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.tiff',  # Images
-        '.json', '.xml',          # Text formats
-        '.zip',                   # Archives
-        '.epub',                  # eBooks
-        '.ppt',                   # Legacy PowerPoint (via markitdown)
-        '.doc',                   # Legacy Word (via markitdown)
+        '.xlsx',
+        '.xls',
+        '.csv',  # Excel/spreadsheets
+        '.html',
+        '.htm',  # Web pages
+        '.png',
+        '.jpg',
+        '.jpeg',
+        '.gif',
+        '.bmp',
+        '.tiff',  # Images
+        '.json',
+        '.xml',  # Text formats
+        '.zip',  # Archives
+        '.epub',  # eBooks
+        '.ppt',  # Legacy PowerPoint (via markitdown)
+        '.doc',  # Legacy Word (via markitdown)
     } | AUDIO_EXTENSIONS  # Include audio in markitdown extensions
 
     # All supported extensions
@@ -57,7 +66,9 @@ class DocumentConverter:
             skip_audio: If True, skip audio files to avoid multiprocessing leaks from markitdown.
         """
         self.skip_audio = skip_audio
-        logger.info(f"DocumentConverter initialized (priority: pymupdf4llm/python-docx/python-pptx, fallback: markitdown, skip_audio: {skip_audio})")
+        logger.info(
+            f"DocumentConverter initialized (priority: pymupdf4llm/python-docx/python-pptx, fallback: markitdown, skip_audio: {skip_audio})"
+        )
 
     @staticmethod
     def calculate_md5(file_path: str) -> str:
@@ -77,9 +88,9 @@ class DocumentConverter:
         return is_supported
 
     def convert_to_markdown(
-        self,
-        file_path: str,
-        max_file_size: int = 52428800  # 50MB default
+            self,
+            file_path: str,
+            max_file_size: int = 52428800  # 50MB default
     ) -> Dict[str, Any]:
         """
         Convert a document to markdown using specialized libraries.
@@ -158,17 +169,22 @@ class DocumentConverter:
         try:
             # Use priority handlers for known formats (faster)
             if ext == '.pdf':
-                return self._convert_pdf_with_pymupdf(file_path, md5, file_size)
+                return self._convert_pdf_with_pymupdf(file_path, md5,
+                                                      file_size)
             elif ext == '.docx':
-                return self._convert_docx_with_python_docx(file_path, md5, file_size)
+                return self._convert_docx_with_python_docx(
+                    file_path, md5, file_size)
             elif ext == '.pptx':
-                return self._convert_pptx_with_python_pptx(file_path, md5, file_size)
+                return self._convert_pptx_with_python_pptx(
+                    file_path, md5, file_size)
             elif ext in self.MARKITDOWN_EXTENSIONS:
                 # Use markitdown for other supported formats
                 return self._convert_with_markitdown(file_path, md5, file_size)
             else:
                 # Unsupported format
-                logger.warning(f"Cannot convert {file_path}: unsupported file type '{ext}'")
+                logger.warning(
+                    f"Cannot convert {file_path}: unsupported file type '{ext}'"
+                )
                 return {
                     "status": "error",
                     "error": f"Unsupported file type: {ext}",
@@ -176,7 +192,8 @@ class DocumentConverter:
                     "file_size": file_size
                 }
         except Exception as e:
-            logger.error(f"Unexpected error converting {file_path}: {e}", exc_info=True)
+            logger.error(f"Unexpected error converting {file_path}: {e}",
+                         exc_info=True)
             return {
                 "status": "error",
                 "error": f"Conversion failed: {str(e)}",
@@ -184,12 +201,8 @@ class DocumentConverter:
                 "file_size": file_size
             }
 
-    def _convert_pdf_with_pymupdf(
-        self,
-        file_path: str,
-        md5: str,
-        file_size: int
-    ) -> Dict[str, Any]:
+    def _convert_pdf_with_pymupdf(self, file_path: str, md5: str,
+                                  file_size: int) -> Dict[str, Any]:
         """Convert PDF using lightweight pymupdf4llm (fast, low memory)."""
         try:
             import pymupdf4llm
@@ -197,7 +210,9 @@ class DocumentConverter:
             logger.info(f"Converting PDF {file_path} with pymupdf4llm...")
             markdown_text = pymupdf4llm.to_markdown(file_path)
 
-            logger.info(f"Successfully converted {file_path} ({len(markdown_text)} chars)")
+            logger.info(
+                f"Successfully converted {file_path} ({len(markdown_text)} chars)"
+            )
             return {
                 "status": "success",
                 "markdown": markdown_text,
@@ -206,7 +221,8 @@ class DocumentConverter:
             }
 
         except Exception as e:
-            logger.error(f"Error converting PDF {file_path}: {e}", exc_info=True)
+            logger.error(f"Error converting PDF {file_path}: {e}",
+                         exc_info=True)
             return {
                 "status": "error",
                 "error": str(e),
@@ -214,12 +230,8 @@ class DocumentConverter:
                 "file_size": file_size
             }
 
-    def _convert_docx_with_python_docx(
-        self,
-        file_path: str,
-        md5: str,
-        file_size: int
-    ) -> Dict[str, Any]:
+    def _convert_docx_with_python_docx(self, file_path: str, md5: str,
+                                       file_size: int) -> Dict[str, Any]:
         """Convert DOCX using lightweight python-docx (fast, low memory)."""
         try:
             from docx import Document
@@ -228,7 +240,8 @@ class DocumentConverter:
             doc = Document(file_path)
             text = "\n".join([para.text for para in doc.paragraphs])
 
-            logger.info(f"Successfully converted {file_path} ({len(text)} chars)")
+            logger.info(
+                f"Successfully converted {file_path} ({len(text)} chars)")
             return {
                 "status": "success",
                 "markdown": text,  # Plain text, not markdown, but good enough
@@ -237,7 +250,8 @@ class DocumentConverter:
             }
 
         except Exception as e:
-            logger.error(f"Error converting DOCX {file_path}: {e}", exc_info=True)
+            logger.error(f"Error converting DOCX {file_path}: {e}",
+                         exc_info=True)
             return {
                 "status": "error",
                 "error": str(e),
@@ -245,12 +259,8 @@ class DocumentConverter:
                 "file_size": file_size
             }
 
-    def _convert_pptx_with_python_pptx(
-        self,
-        file_path: str,
-        md5: str,
-        file_size: int
-    ) -> Dict[str, Any]:
+    def _convert_pptx_with_python_pptx(self, file_path: str, md5: str,
+                                       file_size: int) -> Dict[str, Any]:
         """Convert PPTX using lightweight python-pptx (fast, low memory)."""
         try:
             from pptx import Presentation
@@ -265,16 +275,20 @@ class DocumentConverter:
 
             result_text = "\n".join(text)
 
-            logger.info(f"Successfully converted {file_path} ({len(result_text)} chars)")
+            logger.info(
+                f"Successfully converted {file_path} ({len(result_text)} chars)"
+            )
             return {
                 "status": "success",
-                "markdown": result_text,  # Plain text, not markdown, but good enough
+                "markdown":
+                result_text,  # Plain text, not markdown, but good enough
                 "md5": md5,
                 "file_size": file_size
             }
 
         except Exception as e:
-            logger.error(f"Error converting PPTX {file_path}: {e}", exc_info=True)
+            logger.error(f"Error converting PPTX {file_path}: {e}",
+                         exc_info=True)
             return {
                 "status": "error",
                 "error": str(e),
@@ -282,23 +296,21 @@ class DocumentConverter:
                 "file_size": file_size
             }
 
-    def _convert_with_markitdown(
-        self,
-        file_path: str,
-        md5: str,
-        file_size: int
-    ) -> Dict[str, Any]:
+    def _convert_with_markitdown(self, file_path: str, md5: str,
+                                 file_size: int) -> Dict[str, Any]:
         """Convert file using markitdown (fallback for various formats).
 
         Creates a fresh MarkItDown instance for each conversion to avoid
         memory leaks from multiprocessing (ASR for audio files).
         """
         try:
-            from markitdown import MarkItDown
             import gc
 
+            from markitdown import MarkItDown
+
             ext = Path(file_path).suffix.lower()
-            logger.info(f"Converting {ext} file {file_path} with markitdown...")
+            logger.info(
+                f"Converting {ext} file {file_path} with markitdown...")
 
             # Create fresh instance for each conversion to avoid resource leaks
             md_converter = MarkItDown()
@@ -307,7 +319,9 @@ class DocumentConverter:
                 result = md_converter.convert(file_path)
                 markdown_text = result.text_content
 
-                logger.info(f"Successfully converted {file_path} ({len(markdown_text)} chars)")
+                logger.info(
+                    f"Successfully converted {file_path} ({len(markdown_text)} chars)"
+                )
                 return {
                     "status": "success",
                     "markdown": markdown_text,
@@ -320,7 +334,8 @@ class DocumentConverter:
                 gc.collect()
 
         except Exception as e:
-            logger.error(f"Error converting {file_path} with markitdown: {e}", exc_info=True)
+            logger.error(f"Error converting {file_path} with markitdown: {e}",
+                         exc_info=True)
             return {
                 "status": "error",
                 "error": str(e),

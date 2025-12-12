@@ -1,19 +1,20 @@
 """Indexing API endpoints."""
 import logging
 import os
-from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 
 import psutil
+from elfeed_summary_db_server.config import settings
+from elfeed_summary_db_server.models.schemas import (IndexFileRequest,
+                                                     IndexFileResponse)
+from elfeed_summary_db_server.services.chunking import chunk_text
+from elfeed_summary_db_server.services.clip_service import get_clip_service
+from elfeed_summary_db_server.services.database import Database
+from elfeed_summary_db_server.services.document_converter import \
+    get_document_converter
+from elfeed_summary_db_server.services.embeddings import get_embedding_service
 from fastapi import APIRouter, HTTPException
-from org_db_server.config import settings
-from org_db_server.models.schemas import IndexFileRequest, IndexFileResponse
-from org_db_server.services.chunking import chunk_text
-from org_db_server.services.clip_service import get_clip_service
-from org_db_server.services.database import Database
-from org_db_server.services.document_converter import get_document_converter
-from org_db_server.services.embeddings import get_embedding_service
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +40,7 @@ def log_memory_usage(context: str = ""):
 router = APIRouter(prefix="/api", tags=["indexing"])
 
 # Global database instance (will be improved later with dependency injection)
-db = Database(settings.db_path, settings.semantic_db_path,
-              settings.image_db_path)
+db = Database(settings.db_path, settings.semantic_db_path)
 
 
 @router.get("/files")
@@ -82,11 +82,6 @@ async def delete_file(filename: str) -> Dict[str, Any]:
         cursor.execute("DELETE FROM chunks WHERE filename = ?", (filename, ))
         db.semantic_conn.commit()
 
-        # Delete from image database (images and embeddings)
-        cursor = db.image_conn.cursor()
-        cursor.execute("DELETE FROM images WHERE filename = ?", (filename, ))
-        db.image_conn.commit()
-
         return {
             "status":
             "deleted",
@@ -100,7 +95,6 @@ async def delete_file(filename: str) -> Dict[str, Any]:
     except Exception as e:
         db.main_conn.rollback()
         db.semantic_conn.rollback()
-        db.image_conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -114,7 +108,6 @@ async def index_file(request: IndexFileRequest):
         logger.info(f"Indexing file: {request.filename}")
         logger.info(f"  Headlines: {len(request.headlines)}")
         logger.info(f"  Links: {len(request.links)}")
-        logger.info(f"  Images: {len(request.images)}")
         logger.info(f"  Linked files: {len(request.linked_files)}")
 
         # Get or create file entry
@@ -128,8 +121,6 @@ async def index_file(request: IndexFileRequest):
                        (file_id, ))
         cursor.execute("DELETE FROM links WHERE filename_id = ?", (file_id, ))
         cursor.execute("DELETE FROM file_keywords WHERE filename_id = ?",
-                       (file_id, ))
-        cursor.execute("DELETE FROM src_blocks WHERE filename_id = ?",
                        (file_id, ))
 
         # Insert headlines
@@ -256,31 +247,6 @@ async def index_file(request: IndexFileRequest):
                     print(
                         f"DEBUG: Image file not found or not a file: {img_path}"
                     )
-
-            # Generate CLIP embeddings for valid images
-            if images_data:
-                print(
-                    f"DEBUG: Generating CLIP embeddings for {len(images_data)} images"
-                )
-                try:
-                    clip_service = get_clip_service()
-                    image_paths = [img["path"] for img in images_data]
-                    embeddings = clip_service.generate_image_embeddings(
-                        image_paths)
-                    print(f"DEBUG: Generated {len(embeddings)} embeddings")
-
-                    # Store images and embeddings (image DB uses filename not file_id)
-                    db.store_images(request.filename, images_data, embeddings,
-                                    clip_service.model_name)
-                    print(f"DEBUG: Successfully stored images and embeddings")
-                except Exception as e:
-                    print(f"Error generating CLIP embeddings: {e}")
-                    import traceback
-                    traceback.print_exc()
-                    # Continue without image embeddings
-            else:
-                print(
-                    f"DEBUG: No valid images to process after path resolution")
 
         # Process linked files (PDF, DOCX, etc.)
         linked_files_indexed = 0
