@@ -1,13 +1,14 @@
 """Text chunking service."""
 import re
-from typing import List, Dict, Literal
+from typing import Any, Dict, List, Literal
+
 
 def chunk_text(
     text: str,
     method: Literal["paragraph", "fixed"] = "paragraph",
     chunk_size: int = 512,
     chunk_overlap: int = 50
-) -> List[Dict[str, any]]:
+) -> List[Dict[str, Any]]:
     """
     Chunk text into smaller pieces.
 
@@ -24,7 +25,6 @@ def chunk_text(
 
     if method == "paragraph":
         # Split by blank lines (paragraphs) while tracking original positions
-        current_line = 1  # Line numbers start at 1
         current_pos = 0
 
         # Find all paragraph boundaries
