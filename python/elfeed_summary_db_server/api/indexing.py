@@ -43,18 +43,18 @@ router = APIRouter(prefix="/api", tags=["indexing"])
 db = Database(settings.db_path, settings.semantic_db_path)
 
 
-@router.get("/files")
-async def get_files() -> Dict[str, Any]:
-    """Get list of all files in the database."""
+@router.get("/entries")
+async def get_entries() -> Dict[str, Any]:
+    """Get list of all entries in the database."""
     try:
-        cursor = db.main_conn.cursor()
+        cursor = db.semantic_conn.cursor()
         cursor.execute(
-            "SELECT filename, indexed_at FROM files ORDER BY indexed_at DESC")
+            "SELECT entry_id, title, indexed_at FROM entries ORDER BY indexed_at DESC")
         rows = cursor.fetchall()
 
-        files = [{"filename": row[0], "indexed_at": row[1]} for row in rows]
+        entries = [{"entry_id": row[0], "title": row[1], "indexed_at": row[2]} for row in rows]
 
-        return {"files": files}
+        return {"entries": entries}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
