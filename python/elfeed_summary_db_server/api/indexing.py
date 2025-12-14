@@ -59,36 +59,27 @@ async def get_entries() -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.delete("/file")
-async def delete_file(filename: str) -> Dict[str, Any]:
-    """Delete a file and all its associated data from all databases."""
+@router.delete("/entry")
+async def delete_entry(title: str) -> Dict[str, Any]:
+    """Delete an entry and all its associated data from all databases."""
     try:
         # Delete from main database (metadata)
-        cursor = db.main_conn.cursor()
-        cursor.execute("SELECT rowid FROM files WHERE filename = ?",
-                       (filename, ))
+        cursor = db.semantic_conn.cursor()
+        cursor.execute("SELECT rowid FROM entries WHERE title = ?", (title, ))
         row = cursor.fetchone()
 
         if not row:
             raise HTTPException(status_code=404,
-                                detail=f"File not found: {filename}")
+                                detail=f"title not found: {title}")
 
-        file_id = row[0]
-        cursor.execute("DELETE FROM files WHERE rowid = ?", (file_id, ))
-        db.main_conn.commit()
-
-        # Delete from semantic database (chunks and embeddings)
-        cursor = db.semantic_conn.cursor()
-        cursor.execute("DELETE FROM chunks WHERE filename = ?", (filename, ))
+        entry_id = row[0]
+        cursor.execute("DELETE FROM entries WHERE rowid = ?", (entry_id, ))
         db.semantic_conn.commit()
 
         return {
-            "status":
-            "deleted",
-            "filename":
-            filename,
-            "message":
-            f"Successfully deleted {filename} and all associated data from all databases"
+            "status": "deleted",
+            "title": title,
+            "message": f"Successfully deleted {title} and all associated data from all tables"
         }
     except HTTPException:
         raise
