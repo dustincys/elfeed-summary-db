@@ -5,19 +5,13 @@ SEMANTIC_SCHEMA = """
 -- Chunks table for semantic search
 CREATE TABLE IF NOT EXISTS chunks (
     rowid INTEGER PRIMARY KEY,
-    filename TEXT NOT NULL,
-    headline_id INTEGER,
+    title TEXT NOT NULL,
+    entry_id TEXT NOT NULL,
     chunk_text TEXT NOT NULL,
-    chunk_type TEXT,
-    begin_line INTEGER NOT NULL,
-    end_line INTEGER NOT NULL,
-    char_offset INTEGER,
-    linked_file_id INTEGER,
-    linked_file_path TEXT
+    chunk_type TEXT
 );
 
-CREATE INDEX IF NOT EXISTS idx_chunks_filename ON chunks(filename);
-CREATE INDEX IF NOT EXISTS idx_chunks_linked_file ON chunks(linked_file_path);
+CREATE INDEX IF NOT EXISTS idx_chunks_title ON chunks(title);
 
 -- Embeddings table with libsql vector search
 -- Note: F32_BLOB(384) is required for libsql vector search (all-MiniLM-L6-v2 model)
