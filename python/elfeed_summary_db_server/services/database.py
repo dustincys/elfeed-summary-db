@@ -106,11 +106,9 @@ class Database:
         for chunk_data, embedding in zip(chunks, embeddings):
             # Insert chunk
             cursor.execute(
-                """INSERT INTO chunks (filename, headline_id, chunk_text, chunk_type, begin_line, end_line, char_offset, linked_file_id, linked_file_path)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (filename, None, chunk_data["text"], chunk_data["chunk_type"],
-                 chunk_data["begin_line"], chunk_data["end_line"], 0, None,
-                 None))
+                """INSERT INTO chunks (title, entry_id, chunk_text, chunk_type)
+                   VALUES (?, ?, ?, ?)""",
+                (title, None, chunk_data["text"], chunk_data["chunk_type"]))
             chunk_id = cursor.lastrowid
 
             # Convert embedding to bytes
