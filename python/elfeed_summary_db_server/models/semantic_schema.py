@@ -2,6 +2,16 @@
 
 # Semantic search database schema - only chunks and embeddings with vector search
 SEMANTIC_SCHEMA = """
+-- Chunks table for elfeed entries
+CREATE TABLE IF NOT EXISTS entries (
+    rowid INTEGER PRIMARY KEY,
+    title TEXT NOT NULL,
+    entry_id TEXT NOT NULL,
+    indexed_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_entries_title ON entries(title);
+
 -- Chunks table for semantic search
 CREATE TABLE IF NOT EXISTS chunks (
     rowid INTEGER PRIMARY KEY,
