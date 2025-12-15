@@ -4,13 +4,17 @@
 SEMANTIC_SCHEMA = """
 -- Chunks table for elfeed entries
 CREATE TABLE IF NOT EXISTS entries (
-    rowid INTEGER PRIMARY KEY,
+    rowid TEXT,
+    entry_id TEXT PRIMARY KEY,
     title TEXT NOT NULL,
-    entry_id TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    content TEXT,
+    md5 TEXT NOT NULL,
     indexed_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_entries_title ON entries(title);
+CREATE INDEX IF NOT EXISTS idx_entries_id ON entries(entry_id);
 
 -- Chunks table for semantic search
 CREATE TABLE IF NOT EXISTS chunks (
@@ -18,7 +22,8 @@ CREATE TABLE IF NOT EXISTS chunks (
     title TEXT NOT NULL,
     entry_id TEXT NOT NULL,
     chunk_text TEXT NOT NULL,
-    chunk_type TEXT
+    chunk_type TEXT,
+    FOREIGN KEY(entry_id) REFERENCES entries(entry_id) ON DELETE CASCADE
 );
 
 CREATE INDEX IF NOT EXISTS idx_chunks_title ON chunks(title);

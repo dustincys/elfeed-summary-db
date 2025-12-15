@@ -1,9 +1,8 @@
-"""CLIP service for image-text embeddings using Sentence Transformers."""
+"""CLIP service for text embeddings using Sentence Transformers."""
 from pathlib import Path
 from typing import List, Union
 
 import numpy as np
-from PIL import Image
 from sentence_transformers import SentenceTransformer
 
 

@@ -1,1 +1,1 @@
-"""Services for org-db server."""
+"""Services for elfeed-summary-db server."""

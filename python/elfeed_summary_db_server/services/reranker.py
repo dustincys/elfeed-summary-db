@@ -1,7 +1,8 @@
 """Cross-encoder reranking service for semantic search."""
-from sentence_transformers import CrossEncoder
-from typing import List, Tuple, Optional
 import logging
+from typing import List, Optional
+
+from sentence_transformers import CrossEncoder
 
 logger = logging.getLogger(__name__)
 
