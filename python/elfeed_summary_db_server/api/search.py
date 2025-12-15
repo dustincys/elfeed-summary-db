@@ -9,13 +9,9 @@ from fastapi import APIRouter, HTTPException
 logger = logging.getLogger(__name__)
 
 from elfeed_summary_db_server.config import settings
-from elfeed_summary_db_server.models.schemas import (FulltextSearchRequest,
-                                                     FulltextSearchResponse,
-                                                     FulltextSearchResult,
-                                                     SearchResult,
+from elfeed_summary_db_server.models.schemas import (SearchResult,
                                                      SemanticSearchRequest,
                                                      SemanticSearchResponse)
-from elfeed_summary_db_server.services.clip_service import get_clip_service
 from elfeed_summary_db_server.services.database import Database
 from elfeed_summary_db_server.services.embeddings import get_embedding_service
 from elfeed_summary_db_server.services.reranker import get_reranker_service
