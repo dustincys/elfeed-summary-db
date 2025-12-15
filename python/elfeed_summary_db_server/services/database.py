@@ -7,20 +7,13 @@ Three separate databases:
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 import libsql
 import numpy as np
 from elfeed_summary_db_server.models.semantic_schema import SEMANTIC_SCHEMA
 
 logger = logging.getLogger(__name__)
-
-
-def _row_to_dict(cursor, row):
-    """Convert a database row tuple to a dict using cursor description."""
-    if row is None:
-        return None
-    return {desc[0]: value for desc, value in zip(cursor.description, row)}
 
 
 class Database:
@@ -88,27 +81,38 @@ class Database:
     # Semantic DB Operations (chunks, embeddings, vector search)
     # -------------------------------------------------------------------------
 
-    def store_chunks(self, filename: str, chunks: List[Dict],
+    def store_chunks(self, entry_id: str, title: str, summary: str,
+                     content: str, md5: str, chunks: List[Dict],
                      embeddings: List[np.ndarray], model_name: str):
         """Store text chunks and their embeddings in semantic DB.
 
         Args:
-            filename: Full path to org file (used instead of file_id)
+            entry_id: entry id
+            title: title of elfeed entry
+            summary: summary of elfeed entry
+            content: content of elfeed entry
+            md5: md5 of elfeed entry
             chunks: List of chunk dictionaries
             embeddings: List of embedding vectors
             model_name: Name of embedding model used
         """
         cursor = self.semantic_conn.cursor()
 
-        # Delete existing chunks for this file
-        cursor.execute("DELETE FROM chunks WHERE filename = ?", (filename, ))
+        # Delete existing information for this file
+        cursor.execute("DELETE FROM entries WHERE rowid = ?", (entry_id, ))
+
+        cursor.execute(
+            """INSERT INTO entries (entry_id, title, summary, content, md5, index_at) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (entry_id, title, summary, content, md5,
+             datetime.now().isoformat()))
 
         for chunk_data, embedding in zip(chunks, embeddings):
             # Insert chunk
             cursor.execute(
                 """INSERT INTO chunks (title, entry_id, chunk_text, chunk_type)
                    VALUES (?, ?, ?, ?)""",
-                (title, None, chunk_data["text"], chunk_data["chunk_type"]))
+                (title, entry_id, chunk_data["text"],
+                 chunk_data["chunk_type"]))
             chunk_id = cursor.lastrowid
 
             # Convert embedding to bytes
