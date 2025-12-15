@@ -42,15 +42,15 @@ Default 240 seconds (4 minutes). Files that timeout will be skipped."
 (defvar org-db-v3-index-failed-files nil
   "List of files that failed to index in the current operation.")
 
-(defun org-db-v3-index-file-async (filename)
-  "Index FILENAME asynchronously by sending to server.
+(defun elfeed-summary-db-index-entry-async (entry_id)
+  "Index entry asynchronously by sending to server.
 Disables local variables and hooks for safe and fast bulk indexing.
 Skips Emacs temporary files (.#*, #*#, *~) and remote Tramp files."
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
-  ;; Skip remote Tramp files
-  (when (file-remote-p filename)
-    (error "Skipping remote Tramp file: %s" filename))
+  ;; Skip entry without summary
+  (when (elfeed-meta elfeed-show-entry :summary)
+    (error "Skipping entry that no summaried: %s" (elfeed-entry-title entry)))
 
   (let ((basename (file-name-nondirectory filename)))
     ;; Skip Emacs temporary files
@@ -180,10 +180,10 @@ Wraps processing in error handling to prevent queue stalls."
                             ;; Check if it's a timeout
                             (if (and (listp error) (eq (car error) 28))
                                 (message "Timeout indexing %s (exceeded %d seconds)"
-                                        (file-name-nondirectory filename)
-                                        org-db-v3-index-timeout)
+                                         (file-name-nondirectory filename)
+                                         org-db-v3-index-timeout)
                               (message "Error indexing %s: %s"
-                                      (file-name-nondirectory filename) error))
+                                       (file-name-nondirectory filename) error))
                             ;; Continue with next file even on error
                             (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))))
                 ;; Kill buffer if it wasn't already open
@@ -283,32 +283,32 @@ Skips remote Tramp files."
 
                 ;; Show summary and confirm
                 (let ((msg (format "Reindex %d existing file%s%s%s? "
-                                  (length existing-files)
-                                  (if (= (length existing-files) 1) "" "s")
-                                  (if missing-files
-                                      (format ", remove %d missing file%s"
-                                             (length missing-files)
-                                             (if (= (length missing-files) 1) "" "s"))
-                                    "")
-                                  (if remote-files
-                                      (format ", skip %d remote file%s"
-                                             (length remote-files)
-                                             (if (= (length remote-files) 1) "" "s"))
-                                    ""))))
+                                   (length existing-files)
+                                   (if (= (length existing-files) 1) "" "s")
+                                   (if missing-files
+                                       (format ", remove %d missing file%s"
+                                               (length missing-files)
+                                               (if (= (length missing-files) 1) "" "s"))
+                                     "")
+                                   (if remote-files
+                                       (format ", skip %d remote file%s"
+                                               (length remote-files)
+                                               (if (= (length remote-files) 1) "" "s"))
+                                     ""))))
                   (when (yes-or-no-p msg)
                     ;; Delete missing files from database immediately
                     (when missing-files
                       (message "Removing %d missing file%s from database..."
-                              (length missing-files)
-                              (if (= (length missing-files) 1) "" "s"))
+                               (length missing-files)
+                               (if (= (length missing-files) 1) "" "s"))
                       (dolist (filename missing-files)
                         (org-db-v3-delete-file-async filename)))
 
                     ;; Remove remote files from database
                     (when remote-files
                       (message "Removing %d remote file%s from database..."
-                              (length remote-files)
-                              (if (= (length remote-files) 1) "" "s"))
+                               (length remote-files)
+                               (if (= (length remote-files) 1) "" "s"))
                       (dolist (filename remote-files)
                         (org-db-v3-delete-file-async filename)))
 
