@@ -1,13 +1,13 @@
-;;; org-db-v3-search.el --- Semantic search for org-db v3 -*- lexical-binding: t; -*-
+;;; elfeed-summary-db-search.el --- Semantic search for elfeed summary -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025
 
-;; Author: org-db-v3
+;; Author: elfeed-summary-db
 ;; Keywords: org-mode, database, search
 
 ;;; Commentary:
 
-;; Semantic search functionality for org-db v3.
+;; Semantic search functionality for elfeed summary.
 ;; Uses vector embeddings to find semantically similar content.
 
 ;;; Code:
@@ -21,9 +21,9 @@
 (defvar url-request-data)
 
 ;; Forward declarations
-(declare-function org-db-v3-server-url "org-db-v3")
-(declare-function org-db-v3-ensure-server "org-db-v3")
-(declare-function org-db-v3--scope-to-params "org-db-v3-ui")
+(declare-function elfeed-summary-db-server-url "elfeed-summary-db")
+(declare-function elfeed-summary-db-ensure-server "elfeed-summary-db")
+(declare-function elfeed-summary-db--scope-to-params "elfeed-summary-db-ui")
 
 ;; External package functions
 (declare-function plz "plz")
@@ -32,47 +32,47 @@
 (declare-function ivy-configure "ivy")
 
 ;; Forward declare scope variable
-(defvar org-db-v3-search-scope)
+(defvar elfeed-summary-db-search-scope)
 
 ;; Require plz only when available (not in tests)
 (when (require 'plz nil t)
   (defvar plz-available t))
 
-(unless (boundp 'org-db-v3-server-host)
-  (defvar org-db-v3-server-host "127.0.0.1"))
+(unless (boundp 'elfeed-summary-db-server-host)
+  (defvar elfeed-summary-db-server-host "127.0.0.1"))
 
-(unless (boundp 'org-db-v3-server-port)
-  (defvar org-db-v3-server-port 8765))
+(unless (boundp 'elfeed-summary-db-server-port)
+  (defvar elfeed-summary-db-server-port 8875))
 
-(unless (fboundp 'org-db-v3-server-url)
-  (defun org-db-v3-server-url ()
+(unless (fboundp 'elfeed-summary-db-server-url)
+  (defun elfeed-summary-db-server-url ()
     "Return the base URL for the org-db server."
-    (format "http://%s:%d" org-db-v3-server-host org-db-v3-server-port)))
+    (format "http://%s:%d" elfeed-summary-db-server-host elfeed-summary-db-server-port)))
 
-(unless (fboundp 'org-db-v3-ensure-server)
-  (defun org-db-v3-ensure-server ()
+(unless (fboundp 'elfeed-summary-db-ensure-server)
+  (defun elfeed-summary-db-ensure-server ()
     "Ensure server is running (stub for testing)."
     nil))
 
-(defcustom org-db-v3-search-default-limit 10
+(defcustom elfeed-summary-db-search-default-limit 10
   "Default number of search results to retrieve."
   :type 'integer
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defcustom org-db-v3-search-use-reranking nil
+(defcustom elfeed-summary-db-search-use-reranking nil
   "Enable cross-encoder reranking for more accurate semantic search.
 When enabled, retrieves more candidates and reranks them using a
 cross-encoder model for better relevance. Slower but more accurate."
   :type 'boolean
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defcustom org-db-v3-search-rerank-candidates 50
+(defcustom elfeed-summary-db-search-rerank-candidates 50
   "Number of candidates to retrieve before reranking.
-Only used when `org-db-v3-search-use-reranking' is non-nil."
+Only used when `elfeed-summary-db-search-use-reranking' is non-nil."
   :type 'integer
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defcustom org-db-v3-headline-sort-order "last_updated"
+(defcustom elfeed-summary-db-headline-sort-order "last_updated"
   "Default sort order for headline search results.
 - \"filename\": Sort alphabetically by filename
 - \"last_updated\": Sort by most recently updated files first (default)
@@ -80,44 +80,44 @@ Only used when `org-db-v3-search-use-reranking' is non-nil."
   :type '(choice (const :tag "By filename (alphabetical)" "filename")
                  (const :tag "By last updated (most recent first)" "last_updated")
                  (const :tag "By last indexed (most recent first)" "indexed_at"))
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
 ;;;###autoload
-(defun org-db-v3-semantic-search (query &optional limit)
+(defun elfeed-summary-db-semantic-search (query &optional limit)
   "Perform semantic search for QUERY.
-Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
+Retrieve up to LIMIT results (default `elfeed-summary-db-search-default-limit')."
   (interactive (list (read-string "Search query: ")
-                    (when current-prefix-arg
-                      (read-number "Limit: " org-db-v3-search-default-limit))))
+                     (when current-prefix-arg
+                       (read-number "Limit: " elfeed-summary-db-search-default-limit))))
 
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
-  (let* ((limit (or limit org-db-v3-search-default-limit))
-         (scope-params (when (fboundp 'org-db-v3--scope-to-params)
-                         (org-db-v3--scope-to-params)))
+  (let* ((limit (or limit elfeed-summary-db-search-default-limit))
+         (scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
+                         (elfeed-summary-db--scope-to-params)))
          (request-body (append `((query . ,query)
-                                (limit . ,limit)
-                                (rerank . ,(if org-db-v3-search-use-reranking t :json-false))
-                                (rerank_candidates . ,org-db-v3-search-rerank-candidates))
-                              (when scope-params
-                                (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
-                                      (cons 'keyword (plist-get scope-params :keyword)))))))
-    (plz 'post (concat (org-db-v3-server-url) "/api/search/semantic")
+                                 (limit . ,limit)
+                                 (rerank . ,(if elfeed-summary-db-search-use-reranking t :json-false))
+                                 (rerank_candidates . ,elfeed-summary-db-search-rerank-candidates))
+                               (when scope-params
+                                 (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                       (cons 'keyword (plist-get scope-params :keyword)))))))
+    (plz 'post (concat (elfeed-summary-db-server-url) "/api/search/semantic")
       :headers '(("Content-Type" . "application/json"))
       :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
       :as #'json-read
       :then (lambda (response)
               ;; Reset scope after search
-              (when (boundp 'org-db-v3-search-scope)
-                (setq org-db-v3-search-scope '(all . nil)))
-              (org-db-v3-display-search-results query response))
+              (when (boundp 'elfeed-summary-db-search-scope)
+                (setq elfeed-summary-db-search-scope '(all . nil)))
+              (elfeed-summary-db-display-search-results query response))
       :else (lambda (error)
               ;; Reset scope even on error
-              (when (boundp 'org-db-v3-search-scope)
-                (setq org-db-v3-search-scope '(all . nil)))
+              (when (boundp 'elfeed-summary-db-search-scope)
+                (setq elfeed-summary-db-search-scope '(all . nil)))
               (message "Search error: %s" (plz-error-message error))))))
 
-(defun org-db-v3-display-search-results (query response)
+(defun elfeed-summary-db-display-search-results (query response)
   "Display search RESPONSE for QUERY using completing-read."
   (let* ((results (alist-get 'results response))
          (model-used (alist-get 'model_used response))
@@ -142,29 +142,29 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                  ;; Truncate and clean chunk text for display
                  (context-width 60)
                  (display-text (replace-regexp-in-string
-                               "[\n\r]+" " "
-                               (if (> (length chunk-text) context-width)
-                                   (concat (substring chunk-text 0 (- context-width 3)) "...")
-                                 chunk-text)))
+                                "[\n\r]+" " "
+                                (if (> (length chunk-text) context-width)
+                                    (concat (substring chunk-text 0 (- context-width 3)) "...")
+                                  chunk-text)))
                  ;; Pad context to fixed width for alignment
                  (padded-context (format (format "%%-%ds" context-width) display-text))
                  ;; Note: File type prefix is now added by the Python API in chunk-text
                  ;; Format with fixed-width columns: score | context | filename:line
                  (candidate (format "%-6.3f | %s | %s:%d"
-                                   similarity
-                                   padded-context
-                                   filename
-                                   begin-line)))
+                                    similarity
+                                    padded-context
+                                    filename
+                                    begin-line)))
 
             ;; Store metadata
             (puthash candidate
-                    (list :file filename
-                          :line begin-line
-                          :end-line end-line
-                          :text chunk-text
-                          :linked-file-path linked-file-path
-                          :linked-file-type linked-file-type)
-                    metadata-table)
+                     (list :file filename
+                           :line begin-line
+                           :end-line end-line
+                           :text chunk-text
+                           :linked-file-path linked-file-path
+                           :linked-file-type linked-file-type)
+                     metadata-table)
             (push candidate candidates)))
 
         ;; Reverse to show best results first
@@ -172,12 +172,12 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
 
         ;; Let user select
         (let ((selection (completing-read
-                         (format "Search results (%s%s, %d found): "
-                                model-used
-                                (if reranked " + reranked" "")
-                                (length results))
-                         candidates
-                         nil t)))
+                          (format "Search results (%s%s, %d found): "
+                                  model-used
+                                  (if reranked " + reranked" "")
+                                  (length results))
+                          candidates
+                          nil t)))
           (when selection
             (let* ((metadata (gethash selection metadata-table))
                    (file (plist-get metadata :file))
@@ -189,14 +189,14 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                 (recenter)))))))))
 
 ;;;###autoload
-(defun org-db-v3-search-at-point ()
+(defun elfeed-summary-db-search-at-point ()
   "Perform semantic search using text at point or region."
   (interactive)
   (let ((query (if (use-region-p)
                    (buffer-substring-no-properties (region-beginning) (region-end))
                  (thing-at-point 'sentence t))))
     (if query
-        (org-db-v3-semantic-search query)
+        (elfeed-summary-db-semantic-search query)
       (message "No text found at point"))))
 
 ;; Ivy-based semantic search with dynamic collection
@@ -214,76 +214,76 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
 ;;   - c: Copy chunk text to kill ring
 ;; - Results show similarity score, context snippet, and file location
 ;;
-;; Usage: M-x org-db-v3-semantic-search-ivy RET
+;; Usage: M-x elfeed-summary-db-semantic-search-ivy RET
 ;; Then start typing your query - results update as you type
 ;; With prefix arg (C-u): Change the number of results per query
 
-(defcustom org-db-v3-ivy-semantic-limit 20
+(defcustom elfeed-summary-db-ivy-semantic-limit 20
   "Number of results to fetch per query for ivy-based semantic search.
 Used when querying the API dynamically as you type."
   :type 'integer
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defcustom org-db-v3-ivy-semantic-min-query-length 2
+(defcustom elfeed-summary-db-ivy-semantic-min-query-length 2
   "Minimum query length before searching semantically.
 Queries shorter than this will show a prompt message."
   :type 'integer
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defvar org-db-v3--current-semantic-limit 20
+(defvar elfeed-summary-db--current-semantic-limit 20
   "Current limit for semantic search, can be set via prefix arg.")
 
 ;;;###autoload
-(defun org-db-v3-semantic-search-ivy (&optional limit)
+(defun elfeed-summary-db-semantic-search-ivy (&optional limit)
   "Perform dynamic semantic search using ivy - queries API as you type.
 Start typing to search - results update dynamically using vector embeddings.
-LIMIT sets number of results per query (default `org-db-v3-ivy-semantic-limit').
+LIMIT sets number of results per query (default `elfeed-summary-db-ivy-semantic-limit').
 With prefix arg (C-u), prompts for custom limit."
   (interactive (list (when current-prefix-arg
-                       (read-number "Results per query: " org-db-v3-ivy-semantic-limit))))
+                       (read-number "Results per query: " elfeed-summary-db-ivy-semantic-limit))))
 
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
   ;; Set current limit for use in dynamic collection
-  (setq org-db-v3--current-semantic-limit (or limit org-db-v3-ivy-semantic-limit))
+  (setq elfeed-summary-db--current-semantic-limit (or limit elfeed-summary-db-ivy-semantic-limit))
 
   (if (fboundp 'ivy-read)
       (ivy-read "Semantic search (dynamic): "
-                #'org-db-v3--dynamic-semantic-collection
+                #'elfeed-summary-db--dynamic-semantic-collection
                 :dynamic-collection t
-                :caller 'org-db-v3-semantic-search-ivy
+                :caller 'elfeed-summary-db-semantic-search-ivy
                 :action '(1
-                         ("o" org-db-v3--open-semantic-candidate "Open file")
-                         ("c" org-db-v3--copy-semantic-text "Copy text")))
-    (user-error "Ivy is required for dynamic semantic search. Use org-db-v3-semantic-search instead")))
+                          ("o" elfeed-summary-db--open-semantic-candidate "Open file")
+                          ("c" elfeed-summary-db--copy-semantic-text "Copy text")))
+    (user-error "Ivy is required for dynamic semantic search. Use elfeed-summary-db-semantic-search instead")))
 
-(defun org-db-v3--dynamic-semantic-collection (input)
+(defun elfeed-summary-db--dynamic-semantic-collection (input)
   "Fetch semantic results matching INPUT dynamically.
 Called by ivy as the user types. Returns a list of candidates."
-  (if (< (length input) org-db-v3-ivy-semantic-min-query-length)
+  (if (< (length input) elfeed-summary-db-ivy-semantic-min-query-length)
       ;; Show prompt for short queries
-      (list (format "Type at least %d characters to search..." org-db-v3-ivy-semantic-min-query-length))
+      (list (format "Type at least %d characters to search..." elfeed-summary-db-ivy-semantic-min-query-length))
 
     ;; Fetch from API
-    (let* ((scope-params (when (fboundp 'org-db-v3--scope-to-params)
-                           (org-db-v3--scope-to-params)))
+    (let* ((scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
+                           (elfeed-summary-db--scope-to-params)))
            (request-body (append `((query . ,input)
-                                  (limit . ,org-db-v3--current-semantic-limit)
-                                  (rerank . ,(if org-db-v3-search-use-reranking t :json-false))
-                                  (rerank_candidates . ,org-db-v3-search-rerank-candidates))
-                                (when scope-params
-                                  (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
-                                        (cons 'keyword (plist-get scope-params :keyword))))))
+                                   (limit . ,elfeed-summary-db--current-semantic-limit)
+                                   (rerank . ,(if elfeed-summary-db-search-use-reranking t :json-false))
+                                   (rerank_candidates . ,elfeed-summary-db-search-rerank-candidates))
+                                 (when scope-params
+                                   (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                         (cons 'keyword (plist-get scope-params :keyword))))))
            ;; Synchronous request (required for dynamic collection)
            (response
             (condition-case err
                 (let ((url-request-method "POST")
                       (url-request-extra-headers '(("Content-Type" . "application/json")))
                       (url-request-data (encode-coding-string
-                                        (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
-                                        'utf-8)))
+                                         (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
+                                         'utf-8)))
                   (let ((buffer (url-retrieve-synchronously
-                                 (concat (org-db-v3-server-url) "/api/search/semantic")
+                                 (concat (elfeed-summary-db-server-url) "/api/search/semantic")
                                  t nil 5)))  ; 5 second timeout
                     (if (not buffer)
                         nil
@@ -300,13 +300,13 @@ Called by ivy as the user types. Returns a list of candidates."
       (if (and response (alist-get 'results response))
           (let* ((results (alist-get 'results response))
                  (candidates (if (zerop (length results))
-                                (list (format "No results found for: %s" input))
-                              (org-db-v3--build-ivy-semantic-candidates results))))
+                                 (list (format "No results found for: %s" input))
+                               (elfeed-summary-db--build-ivy-semantic-candidates results))))
             candidates)
         ;; Error or no results
         (list (format "Search failed or no results for: %s" input))))))
 
-(defun org-db-v3--build-ivy-semantic-candidates (results)
+(defun elfeed-summary-db--build-ivy-semantic-candidates (results)
   "Build ivy candidates from semantic RESULTS array.
 Each candidate is a string with metadata stored as text properties."
   (let ((candidates nil))
@@ -322,31 +322,31 @@ Each candidate is a string with metadata stored as text properties."
              ;; Truncate and clean chunk text for display
              (context-width 60)
              (display-text (replace-regexp-in-string
-                           "[\n\r]+" " "
-                           (if (> (length chunk-text) context-width)
-                               (concat (substring chunk-text 0 (- context-width 3)) "...")
-                             chunk-text)))
+                            "[\n\r]+" " "
+                            (if (> (length chunk-text) context-width)
+                                (concat (substring chunk-text 0 (- context-width 3)) "...")
+                              chunk-text)))
              (padded-context (format (format "%%-%ds" context-width) display-text))
              ;; Format: score | context | filename:line
              (candidate (format "%-6.3f | %s | %s:%d"
-                               similarity
-                               padded-context
-                               (file-name-nondirectory filename)
-                               begin-line)))
+                                similarity
+                                padded-context
+                                (file-name-nondirectory filename)
+                                begin-line)))
 
         ;; Store metadata as text properties
         (put-text-property 0 (length candidate) 'semantic-data
-                          `(:file ,filename
-                            :line ,begin-line
-                            :end-line ,end-line
-                            :text ,chunk-text
-                            :linked-file-path ,linked-file-path
-                            :linked-file-type ,linked-file-type)
-                          candidate)
+                           `(:file ,filename
+                                   :line ,begin-line
+                                   :end-line ,end-line
+                                   :text ,chunk-text
+                                   :linked-file-path ,linked-file-path
+                                   :linked-file-type ,linked-file-type)
+                           candidate)
         (push candidate candidates)))
     (nreverse candidates)))
 
-(defun org-db-v3--open-semantic-candidate (candidate)
+(defun elfeed-summary-db--open-semantic-candidate (candidate)
   "Open file for selected semantic CANDIDATE.
 CANDIDATE is a string with metadata stored in text properties."
   (let* ((data (get-text-property 0 'semantic-data candidate))
@@ -358,7 +358,7 @@ CANDIDATE is a string with metadata stored in text properties."
       (forward-line (1- line))
       (recenter))))
 
-(defun org-db-v3--copy-semantic-text (candidate)
+(defun elfeed-summary-db--copy-semantic-text (candidate)
   "Copy the chunk text to kill ring for CANDIDATE.
 CANDIDATE is a string with metadata stored in text properties."
   (let* ((data (get-text-property 0 'semantic-data candidate))
@@ -369,44 +369,44 @@ CANDIDATE is a string with metadata stored in text properties."
 
 ;; Configure ivy for semantic search if available
 (with-eval-after-load 'ivy
-  (ivy-configure 'org-db-v3-semantic-search-ivy
-    :height 15
-    :sort-fn nil))  ; Keep relevance order from API
+  (ivy-configure 'elfeed-summary-db-semantic-search-ivy
+                 :height 15
+                 :sort-fn nil))  ; Keep relevance order from API
 
 ;;;###autoload
-(defun org-db-v3-fulltext-search (query &optional limit)
+(defun elfeed-summary-db-fulltext-search (query &optional limit)
   "Perform full-text search for QUERY using FTS5.
-Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
+Retrieve up to LIMIT results (default `elfeed-summary-db-search-default-limit')."
   (interactive (list (read-string "Fulltext search: ")
-                    (when current-prefix-arg
-                      (read-number "Limit: " org-db-v3-search-default-limit))))
+                     (when current-prefix-arg
+                       (read-number "Limit: " elfeed-summary-db-search-default-limit))))
 
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
-  (let* ((limit (or limit org-db-v3-search-default-limit))
-         (scope-params (when (fboundp 'org-db-v3--scope-to-params)
-                         (org-db-v3--scope-to-params)))
+  (let* ((limit (or limit elfeed-summary-db-search-default-limit))
+         (scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
+                         (elfeed-summary-db--scope-to-params)))
          (request-body (append `((query . ,query)
-                                (limit . ,limit))
-                              (when scope-params
-                                (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
-                                      (cons 'keyword (plist-get scope-params :keyword)))))))
-    (plz 'post (concat (org-db-v3-server-url) "/api/search/fulltext")
+                                 (limit . ,limit))
+                               (when scope-params
+                                 (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                       (cons 'keyword (plist-get scope-params :keyword)))))))
+    (plz 'post (concat (elfeed-summary-db-server-url) "/api/search/fulltext")
       :headers '(("Content-Type" . "application/json"))
       :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
       :as #'json-read
       :then (lambda (response)
               ;; Reset scope after search
-              (when (boundp 'org-db-v3-search-scope)
-                (setq org-db-v3-search-scope '(all . nil)))
-              (org-db-v3-display-fulltext-results query response))
+              (when (boundp 'elfeed-summary-db-search-scope)
+                (setq elfeed-summary-db-search-scope '(all . nil)))
+              (elfeed-summary-db-display-fulltext-results query response))
       :else (lambda (error)
               ;; Reset scope even on error
-              (when (boundp 'org-db-v3-search-scope)
-                (setq org-db-v3-search-scope '(all . nil)))
+              (when (boundp 'elfeed-summary-db-search-scope)
+                (setq elfeed-summary-db-search-scope '(all . nil)))
               (message "Search error: %s" (plz-error-message error))))))
 
-(defun org-db-v3-display-fulltext-results (query response)
+(defun elfeed-summary-db-display-fulltext-results (query response)
   "Display full-text search RESPONSE for QUERY using completing-read."
   (let ((results (alist-get 'results response)))
 
@@ -427,7 +427,7 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                  (rank (alist-get 'rank result))
                  ;; Extract search term from snippet (text between >>> and <<<)
                  (search-term (when (string-match ">>>\\([^<]+\\)<<<" snippet)
-                               (match-string 1 snippet)))
+                                (match-string 1 snippet)))
                  ;; Clean snippet for display (remove markers but keep newlines)
                  (clean-snippet (replace-regexp-in-string ">>>\\|<<<" "" snippet))
                  ;; Split snippet into lines and pad each to 80 chars
@@ -435,34 +435,34 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                  (snippet-width 80)
                  ;; Format with fixed-width columns: rank | snippet | filename
                  (candidate (if (= (length snippet-lines) 1)
-                               ;; Single line: format normally
+                                ;; Single line: format normally
+                                (format "%8.2f | %-80s | %s"
+                                        (abs rank)
+                                        (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
+                                        filename)
+                              ;; Multi-line: first line with score and filename, rest indented
+                              (concat
                                (format "%8.2f | %-80s | %s"
-                                      (abs rank)
-                                      (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
-                                      filename)
-                             ;; Multi-line: first line with score and filename, rest indented
-                             (concat
-                              (format "%8.2f | %-80s | %s"
-                                     (abs rank)
-                                     (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
-                                     filename)
-                              (mapconcat
-                               (lambda (line)
-                                 (format "\n         | %-80s |"
-                                        (truncate-string-to-width line snippet-width 0 ?\s)))
-                               (cdr snippet-lines)
-                               "")))))
+                                       (abs rank)
+                                       (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
+                                       filename)
+                               (mapconcat
+                                (lambda (line)
+                                  (format "\n         | %-80s |"
+                                          (truncate-string-to-width line snippet-width 0 ?\s)))
+                                (cdr snippet-lines)
+                                "")))))
 
             ;; Store metadata
             (puthash candidate
-                    (list :file filename
-                          :title title
-                          :content content
-                          :tags tags
-                          :snippet snippet
-                          :search-term search-term
-                          :rank rank)
-                    metadata-table)
+                     (list :file filename
+                           :title title
+                           :content content
+                           :tags tags
+                           :snippet snippet
+                           :search-term search-term
+                           :rank rank)
+                     metadata-table)
             (push candidate candidates)))
 
         ;; Keep order (already sorted by rank from server)
@@ -470,9 +470,9 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
 
         ;; Let user select
         (let ((selection (completing-read
-                         (format "Fulltext results (%d found): " (length results))
-                         candidates
-                         nil t)))
+                          (format "Fulltext results (%d found): " (length results))
+                          candidates
+                          nil t)))
           (when selection
             (let* ((metadata (gethash selection metadata-table))
                    (file (plist-get metadata :file))
@@ -490,39 +490,39 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                     (recenter)))))))))))
 
 ;;;###autoload
-(defun org-db-v3-image-search (query &optional limit)
+(defun elfeed-summary-db-image-search (query &optional limit)
   "Perform image search for QUERY using CLIP embeddings.
-Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
+Retrieve up to LIMIT results (default `elfeed-summary-db-search-default-limit')."
   (interactive (list (read-string "Image search query: ")
-                    (when current-prefix-arg
-                      (read-number "Limit: " org-db-v3-search-default-limit))))
+                     (when current-prefix-arg
+                       (read-number "Limit: " elfeed-summary-db-search-default-limit))))
 
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
-  (let* ((limit (or limit org-db-v3-search-default-limit))
-         (scope-params (when (fboundp 'org-db-v3--scope-to-params)
-                         (org-db-v3--scope-to-params)))
+  (let* ((limit (or limit elfeed-summary-db-search-default-limit))
+         (scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
+                         (elfeed-summary-db--scope-to-params)))
          (request-body (append `((query . ,query)
-                                (limit . ,limit))
-                              (when scope-params
-                                (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
-                                      (cons 'keyword (plist-get scope-params :keyword)))))))
-    (plz 'post (concat (org-db-v3-server-url) "/api/search/images")
+                                 (limit . ,limit))
+                               (when scope-params
+                                 (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                       (cons 'keyword (plist-get scope-params :keyword)))))))
+    (plz 'post (concat (elfeed-summary-db-server-url) "/api/search/images")
       :headers '(("Content-Type" . "application/json"))
       :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
       :as #'json-read
       :then (lambda (response)
               ;; Reset scope after search
-              (when (boundp 'org-db-v3-search-scope)
-                (setq org-db-v3-search-scope '(all . nil)))
-              (org-db-v3-display-image-results query response))
+              (when (boundp 'elfeed-summary-db-search-scope)
+                (setq elfeed-summary-db-search-scope '(all . nil)))
+              (elfeed-summary-db-display-image-results query response))
       :else (lambda (error)
               ;; Reset scope even on error
-              (when (boundp 'org-db-v3-search-scope)
-                (setq org-db-v3-search-scope '(all . nil)))
+              (when (boundp 'elfeed-summary-db-search-scope)
+                (setq elfeed-summary-db-search-scope '(all . nil)))
               (message "Search error: %s" (plz-error-message error))))))
 
-(defun org-db-v3-display-image-results (query response)
+(defun elfeed-summary-db-display-image-results (query response)
   "Display image search RESPONSE for QUERY using completing-read."
   (let* ((results (alist-get 'results response))
          (model-used (alist-get 'model_used response)))
@@ -543,8 +543,8 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                  (image-width 40)
                  (display-image (file-name-nondirectory image-path))
                  (truncated-image (if (> (length display-image) image-width)
-                                     (concat (substring display-image 0 (- image-width 3)) "...")
-                                   display-image))
+                                      (concat (substring display-image 0 (- image-width 3)) "...")
+                                    display-image))
                  (padded-image (format (format "%%-%ds" image-width) truncated-image))
                  ;; Format with fixed-width columns: score | image-filename | org-filename
                  (text-part (format "%-6.3f | %s | %s"
@@ -553,11 +553,11 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
                                     filename))
                  ;; Add thumbnail if image exists
                  (candidate (if (and image-path (file-exists-p image-path))
-                               (concat text-part
-                                       "\n"
-                                       (propertize " " 'display
-                                                  (create-image image-path nil nil :width 200)))
-                             text-part)))
+                                (concat text-part
+                                        "\n"
+                                        (propertize " " 'display
+                                                    (create-image image-path nil nil :width 200)))
+                              text-part)))
 
             ;; Store metadata
             (puthash candidate
@@ -604,76 +604,76 @@ Retrieve up to LIMIT results (default `org-db-v3-search-default-limit')."
 ;; - Thumbnails displayed at 400x250 max size
 ;; - Height configured for 20 lines to accommodate thumbnails
 ;;
-;; Usage: M-x org-db-v3-image-search-ivy RET
+;; Usage: M-x elfeed-summary-db-image-search-ivy RET
 ;; Then start typing your query - results update as you type
 ;; With prefix arg (C-u): Change the number of results per query
 
-(defcustom org-db-v3-ivy-image-limit 20
+(defcustom elfeed-summary-db-ivy-image-limit 20
   "Number of images to fetch per query for ivy-based image search.
 Used when querying the API dynamically as you type."
   :type 'integer
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defcustom org-db-v3-ivy-min-query-length 2
+(defcustom elfeed-summary-db-ivy-min-query-length 2
   "Minimum query length before searching for images.
 Queries shorter than this will show a prompt message."
   :type 'integer
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defvar org-db-v3--current-image-limit 20
+(defvar elfeed-summary-db--current-image-limit 20
   "Current limit for image search, can be set via prefix arg.")
 
 ;;;###autoload
-(defun org-db-v3-image-search-ivy (&optional limit)
+(defun elfeed-summary-db-image-search-ivy (&optional limit)
   "Perform dynamic image search using ivy - queries API as you type.
 Start typing to search - results update dynamically.
-LIMIT sets number of results per query (default `org-db-v3-ivy-image-limit').
+LIMIT sets number of results per query (default `elfeed-summary-db-ivy-image-limit').
 With prefix arg (C-u), prompts for custom limit."
   (interactive (list (when current-prefix-arg
-                       (read-number "Results per query: " org-db-v3-ivy-image-limit))))
+                       (read-number "Results per query: " elfeed-summary-db-ivy-image-limit))))
 
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
   ;; Set current limit for use in dynamic collection
-  (setq org-db-v3--current-image-limit (or limit org-db-v3-ivy-image-limit))
+  (setq elfeed-summary-db--current-image-limit (or limit elfeed-summary-db-ivy-image-limit))
 
   (if (fboundp 'ivy-read)
       (ivy-read "Image search (dynamic): "
-                #'org-db-v3--dynamic-image-collection
+                #'elfeed-summary-db--dynamic-image-collection
                 :dynamic-collection t
-                :caller 'org-db-v3-image-search-ivy
+                :caller 'elfeed-summary-db-image-search-ivy
                 :action '(1
-                         ("o" org-db-v3--open-image-candidate "Open org file")
-                         ("i" org-db-v3--open-image-file "Open image file")
-                         ("c" org-db-v3--copy-image-path "Copy image path")))
-    (user-error "Ivy is required for dynamic image search. Use org-db-v3-image-search instead")))
+                          ("o" elfeed-summary-db--open-image-candidate "Open org file")
+                          ("i" elfeed-summary-db--open-image-file "Open image file")
+                          ("c" elfeed-summary-db--copy-image-path "Copy image path")))
+    (user-error "Ivy is required for dynamic image search. Use elfeed-summary-db-image-search instead")))
 
-(defun org-db-v3--dynamic-image-collection (input)
+(defun elfeed-summary-db--dynamic-image-collection (input)
   "Fetch images matching INPUT dynamically.
 Called by ivy as the user types. Returns a list of candidates with thumbnails."
-  (if (< (length input) org-db-v3-ivy-min-query-length)
+  (if (< (length input) elfeed-summary-db-ivy-min-query-length)
       ;; Show prompt for short queries
-      (list (format "Type at least %d characters to search..." org-db-v3-ivy-min-query-length))
+      (list (format "Type at least %d characters to search..." elfeed-summary-db-ivy-min-query-length))
 
     ;; Fetch from API
-    (let* ((scope-params (when (fboundp 'org-db-v3--scope-to-params)
-                           (org-db-v3--scope-to-params)))
+    (let* ((scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
+                           (elfeed-summary-db--scope-to-params)))
            (request-body (append `((query . ,input)
-                                  (limit . ,org-db-v3--current-image-limit))
-                                (when scope-params
-                                  (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
-                                        (cons 'keyword (plist-get scope-params :keyword))))))
+                                   (limit . ,elfeed-summary-db--current-image-limit))
+                                 (when scope-params
+                                   (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                         (cons 'keyword (plist-get scope-params :keyword))))))
            ;; Synchronous request (required for dynamic collection)
            (response
             (condition-case err
                 (let ((url-request-method "POST")
                       (url-request-extra-headers '(("Content-Type" . "application/json")))
                       (url-request-data (encode-coding-string
-                                        (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
-                                        'utf-8)))
+                                         (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
+                                         'utf-8)))
                   (with-current-buffer
                       (url-retrieve-synchronously
-                       (concat (org-db-v3-server-url) "/api/search/images")
+                       (concat (elfeed-summary-db-server-url) "/api/search/images")
                        t nil 15)  ; 15 second timeout (image search can be slower with large DBs)
                     (goto-char (point-min))
                     (re-search-forward "^$")
@@ -685,13 +685,13 @@ Called by ivy as the user types. Returns a list of candidates with thumbnails."
       (if (and response (alist-get 'results response))
           (let* ((results (alist-get 'results response))
                  (candidates (if (zerop (length results))
-                                (list (format "No images found for: %s" input))
-                              (org-db-v3--build-ivy-image-candidates results))))
+                                 (list (format "No images found for: %s" input))
+                               (elfeed-summary-db--build-ivy-image-candidates results))))
             candidates)
         ;; Error or no results
         (list (format "Search failed or no results for: %s" input))))))
 
-(defun org-db-v3--build-ivy-image-candidates (results)
+(defun elfeed-summary-db--build-ivy-image-candidates (results)
   "Build ivy candidates with thumbnails from RESULTS array.
 Each candidate is a string with metadata stored as text properties."
   (let ((candidates nil))
@@ -704,28 +704,28 @@ Each candidate is a string with metadata stored as text properties."
              (image-basename (file-name-nondirectory image-path))
              (org-basename (file-name-nondirectory filename))
              (text-line (format "%.3f | %-40s | %s"
-                               similarity
-                               (if (> (length image-basename) 40)
-                                   (concat (substring image-basename 0 37) "...")
-                                 image-basename)
-                               org-basename))
+                                similarity
+                                (if (> (length image-basename) 40)
+                                    (concat (substring image-basename 0 37) "...")
+                                  image-basename)
+                                org-basename))
              ;; Candidate with thumbnail on second line
              (candidate (if (and image-path (file-exists-p image-path))
-                           (concat text-line "\n"
-                                  (propertize " " 'display
-                                            (create-image image-path nil nil
-                                                         :max-width 400
-                                                         :max-height 250)))
-                         text-line)))
+                            (concat text-line "\n"
+                                    (propertize " " 'display
+                                                (create-image image-path nil nil
+                                                              :max-width 400
+                                                              :max-height 250)))
+                          text-line)))
 
         ;; Store metadata as text properties
         (put-text-property 0 (length candidate) 'image-data
-                          `(:path ,image-path :file ,filename :score ,similarity)
-                          candidate)
+                           `(:path ,image-path :file ,filename :score ,similarity)
+                           candidate)
         (push candidate candidates)))
     (nreverse candidates)))
 
-(defun org-db-v3--open-image-candidate (candidate)
+(defun elfeed-summary-db--open-image-candidate (candidate)
   "Open org file for selected image CANDIDATE.
 CANDIDATE is a string with metadata stored in text properties."
   (let* ((data (get-text-property 0 'image-data candidate))
@@ -738,7 +738,7 @@ CANDIDATE is a string with metadata stored in text properties."
         (beginning-of-line)
         (recenter)))))
 
-(defun org-db-v3--open-image-file (candidate)
+(defun elfeed-summary-db--open-image-file (candidate)
   "Open the image file directly for CANDIDATE.
 CANDIDATE is a string with metadata stored in text properties."
   (let* ((data (get-text-property 0 'image-data candidate))
@@ -746,7 +746,7 @@ CANDIDATE is a string with metadata stored in text properties."
     (when (and image-path (file-exists-p image-path))
       (find-file image-path))))
 
-(defun org-db-v3--copy-image-path (candidate)
+(defun elfeed-summary-db--copy-image-path (candidate)
   "Copy the image file path to kill ring for CANDIDATE.
 CANDIDATE is a string with metadata stored in text properties."
   (let* ((data (get-text-property 0 'image-data candidate))
@@ -757,9 +757,9 @@ CANDIDATE is a string with metadata stored in text properties."
 
 ;; Configure ivy for image search if available
 (with-eval-after-load 'ivy
-  (ivy-configure 'org-db-v3-image-search-ivy
-    :height 20  ; More space for thumbnails
-    :sort-fn nil))  ; Keep relevance order from API
+  (ivy-configure 'elfeed-summary-db-image-search-ivy
+                 :height 20  ; More space for thumbnails
+                 :sort-fn nil))  ; Keep relevance order from API
 
 
 ;; Ivy-based fulltext search with dynamic collection
@@ -767,69 +767,69 @@ CANDIDATE is a string with metadata stored in text properties."
 ;; The ivy-based fulltext search queries the FTS5 index as you type, providing
 ;; dynamic results. FTS5 is fast (~10-100ms) so this provides good UX.
 
-(defcustom org-db-v3-ivy-fulltext-limit 20
+(defcustom elfeed-summary-db-ivy-fulltext-limit 20
   "Number of results to fetch per query for ivy-based fulltext search.
 Used when querying the API dynamically as you type."
   :type 'integer
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defcustom org-db-v3-ivy-fulltext-min-query-length 2
+(defcustom elfeed-summary-db-ivy-fulltext-min-query-length 2
   "Minimum query length before searching fulltext.
 Queries shorter than this will show a prompt message."
   :type 'integer
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
 
-(defvar org-db-v3--current-fulltext-limit 20
+(defvar elfeed-summary-db--current-fulltext-limit 20
   "Current limit for fulltext search, can be set via prefix arg.")
 
 ;;;###autoload
-(defun org-db-v3-fulltext-search-ivy (&optional limit)
+(defun elfeed-summary-db-fulltext-search-ivy (&optional limit)
   "Perform dynamic fulltext search using ivy - queries API as you type.
 Start typing to search - results update dynamically.
-LIMIT sets number of results per query (default `org-db-v3-ivy-fulltext-limit').
+LIMIT sets number of results per query (default `elfeed-summary-db-ivy-fulltext-limit').
 With prefix arg (C-u), prompts for custom limit."
   (interactive (list (when current-prefix-arg
-                       (read-number "Results per query: " org-db-v3-ivy-fulltext-limit))))
+                       (read-number "Results per query: " elfeed-summary-db-ivy-fulltext-limit))))
 
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
   ;; Set current limit for use in dynamic collection
-  (setq org-db-v3--current-fulltext-limit (or limit org-db-v3-ivy-fulltext-limit))
+  (setq elfeed-summary-db--current-fulltext-limit (or limit elfeed-summary-db-ivy-fulltext-limit))
 
   (if (fboundp 'ivy-read)
       (ivy-read "Fulltext search (dynamic): "
-                #'org-db-v3--dynamic-fulltext-collection
+                #'elfeed-summary-db--dynamic-fulltext-collection
                 :dynamic-collection t
-                :caller 'org-db-v3-fulltext-search-ivy
-                :action #'org-db-v3--open-fulltext-candidate)
-    (user-error "Ivy is required for dynamic fulltext search. Use org-db-v3-fulltext-search instead")))
+                :caller 'elfeed-summary-db-fulltext-search-ivy
+                :action #'elfeed-summary-db--open-fulltext-candidate)
+    (user-error "Ivy is required for dynamic fulltext search. Use elfeed-summary-db-fulltext-search instead")))
 
-(defun org-db-v3--dynamic-fulltext-collection (input)
+(defun elfeed-summary-db--dynamic-fulltext-collection (input)
   "Fetch fulltext results matching INPUT dynamically.
 Called by ivy as the user types. Returns a list of candidates."
-  (if (< (length input) org-db-v3-ivy-fulltext-min-query-length)
+  (if (< (length input) elfeed-summary-db-ivy-fulltext-min-query-length)
       ;; Show prompt for short queries
-      (list (format "Type at least %d characters to search..." org-db-v3-ivy-fulltext-min-query-length))
+      (list (format "Type at least %d characters to search..." elfeed-summary-db-ivy-fulltext-min-query-length))
 
     ;; Fetch from API
-    (let* ((scope-params (when (fboundp 'org-db-v3--scope-to-params)
-                           (org-db-v3--scope-to-params)))
+    (let* ((scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
+                           (elfeed-summary-db--scope-to-params)))
            (request-body (append `((query . ,input)
-                                  (limit . ,org-db-v3--current-fulltext-limit))
-                                (when scope-params
-                                  (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
-                                        (cons 'keyword (plist-get scope-params :keyword))))))
+                                   (limit . ,elfeed-summary-db--current-fulltext-limit))
+                                 (when scope-params
+                                   (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                         (cons 'keyword (plist-get scope-params :keyword))))))
            ;; Synchronous request (required for dynamic collection)
            (response
             (condition-case err
                 (let ((url-request-method "POST")
                       (url-request-extra-headers '(("Content-Type" . "application/json")))
                       (url-request-data (encode-coding-string
-                                        (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
-                                        'utf-8)))
+                                         (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
+                                         'utf-8)))
                   (let ((buffer (url-retrieve-synchronously
-                                 (concat (org-db-v3-server-url) "/api/search/fulltext")
+                                 (concat (elfeed-summary-db-server-url) "/api/search/fulltext")
                                  t nil 5)))  ; 5 second timeout (FTS5 is fast)
                     (if (not buffer)
                         nil
@@ -846,13 +846,13 @@ Called by ivy as the user types. Returns a list of candidates."
       (if (and response (alist-get 'results response))
           (let* ((results (alist-get 'results response))
                  (candidates (if (zerop (length results))
-                                (list (format "No results found for: %s" input))
-                              (org-db-v3--build-ivy-fulltext-candidates results))))
+                                 (list (format "No results found for: %s" input))
+                               (elfeed-summary-db--build-ivy-fulltext-candidates results))))
             candidates)
         ;; Error or no results
         (list (format "Search failed or no results for: %s" input))))))
 
-(defun org-db-v3--build-ivy-fulltext-candidates (results)
+(defun elfeed-summary-db--build-ivy-fulltext-candidates (results)
   "Build ivy candidates from fulltext RESULTS array.
 Each candidate is a string with metadata stored as text properties."
   (let ((candidates nil))
@@ -864,7 +864,7 @@ Each candidate is a string with metadata stored as text properties."
              (rank (alist-get 'rank result))
              ;; Extract search term from snippet (text between >>> and <<<)
              (search-term (when (string-match ">>>\\([^<]+\\)<<<" snippet)
-                           (match-string 1 snippet)))
+                            (match-string 1 snippet)))
              ;; Clean snippet for display (remove markers but keep newlines)
              (clean-snippet (replace-regexp-in-string ">>>\\|<<<" "" snippet))
              ;; Split snippet into lines and pad each to 80 chars
@@ -872,32 +872,32 @@ Each candidate is a string with metadata stored as text properties."
              (snippet-width 80)
              ;; Format: rank | snippet | filename
              (candidate (if (= (length snippet-lines) 1)
-                           ;; Single line: format normally
+                            ;; Single line: format normally
+                            (format "%8.2f | %-80s | %s"
+                                    (abs rank)
+                                    (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
+                                    (file-name-nondirectory filename))
+                          ;; Multi-line: first line with score and filename, rest indented
+                          (concat
                            (format "%8.2f | %-80s | %s"
-                                  (abs rank)
-                                  (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
-                                  (file-name-nondirectory filename))
-                         ;; Multi-line: first line with score and filename, rest indented
-                         (concat
-                          (format "%8.2f | %-80s | %s"
-                                 (abs rank)
-                                 (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
-                                 (file-name-nondirectory filename))
-                          (mapconcat
-                           (lambda (line)
-                             (format "\n         | %-80s |"
-                                    (truncate-string-to-width line snippet-width 0 ?\s)))
-                           (cdr snippet-lines)
-                           "")))))
+                                   (abs rank)
+                                   (truncate-string-to-width (car snippet-lines) snippet-width 0 ?\s)
+                                   (file-name-nondirectory filename))
+                           (mapconcat
+                            (lambda (line)
+                              (format "\n         | %-80s |"
+                                      (truncate-string-to-width line snippet-width 0 ?\s)))
+                            (cdr snippet-lines)
+                            "")))))
 
         ;; Store metadata as text properties
         (put-text-property 0 (length candidate) 'fulltext-data
-                          `(:file ,filename :title ,title :search-term ,search-term)
-                          candidate)
+                           `(:file ,filename :title ,title :search-term ,search-term)
+                           candidate)
         (push candidate candidates)))
     (nreverse candidates)))
 
-(defun org-db-v3--open-fulltext-candidate (candidate)
+(defun elfeed-summary-db--open-fulltext-candidate (candidate)
   "Open file for selected fulltext CANDIDATE.
 CANDIDATE is a string with metadata stored in text properties."
   (let* ((data (get-text-property 0 'fulltext-data candidate))
@@ -918,15 +918,15 @@ CANDIDATE is a string with metadata stored in text properties."
 
 ;; Configure ivy for fulltext search if available
 (with-eval-after-load 'ivy
-  (ivy-configure 'org-db-v3-fulltext-search-ivy
-    :height 15
-    :sort-fn nil))  ; Keep relevance order from API
+  (ivy-configure 'elfeed-summary-db-fulltext-search-ivy
+                 :height 15
+                 :sort-fn nil))  ; Keep relevance order from API
 
 ;;;###autoload
-(defun org-db-v3-headline-search-all (&optional sort-by)
+(defun elfeed-summary-db-headline-search-all (&optional sort-by)
   "Browse ALL headlines and jump to selection.
 Loads all headlines from database upfront. For large databases (100K+
-headlines), this can be slow. Consider using `org-db-v3-headline-search'
+headlines), this can be slow. Consider using `elfeed-summary-db-headline-search'
 instead, which filters dynamically as you type.
 
 You can filter candidates using completing-read after loading.
@@ -938,35 +938,35 @@ With prefix arg, prompt for sort order interactively."
   (interactive
    (list (when current-prefix-arg
            (completing-read "Sort by: "
-                          '("filename" "last_updated" "indexed_at")
-                          nil t nil nil org-db-v3-headline-sort-order))))
+                            '("filename" "last_updated" "indexed_at")
+                            nil t nil nil elfeed-summary-db-headline-sort-order))))
 
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
-  (let* ((sort-order (or sort-by org-db-v3-headline-sort-order))
-         (scope-params (when (fboundp 'org-db-v3--scope-to-params)
-                         (org-db-v3--scope-to-params)))
+  (let* ((sort-order (or sort-by elfeed-summary-db-headline-sort-order))
+         (scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
+                         (elfeed-summary-db--scope-to-params)))
          (request-body (append `((query . "")
-                                (sort_by . ,sort-order))
-                              (when scope-params
-                                (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
-                                      (cons 'keyword (plist-get scope-params :keyword)))))))
-    (plz 'post (concat (org-db-v3-server-url) "/api/search/headlines")
+                                 (sort_by . ,sort-order))
+                               (when scope-params
+                                 (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                       (cons 'keyword (plist-get scope-params :keyword)))))))
+    (plz 'post (concat (elfeed-summary-db-server-url) "/api/search/headlines")
       :headers '(("Content-Type" . "application/json"))
       :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
       :as (lambda () (json-parse-buffer :object-type 'alist :array-type 'list))
       :then (lambda (response)
               ;; Reset scope after search
-              (when (boundp 'org-db-v3-search-scope)
-                (setq org-db-v3-search-scope '(all . nil)))
-              (org-db-v3-display-headline-results response))
+              (when (boundp 'elfeed-summary-db-search-scope)
+                (setq elfeed-summary-db-search-scope '(all . nil)))
+              (elfeed-summary-db-display-headline-results response))
       :else (lambda (error)
               ;; Reset scope even on error
-              (when (boundp 'org-db-v3-search-scope)
-                (setq org-db-v3-search-scope '(all . nil)))
+              (when (boundp 'elfeed-summary-db-search-scope)
+                (setq elfeed-summary-db-search-scope '(all . nil)))
               (message "Search error: %s" (plz-error-message error))))))
 
-(defun org-db-v3-display-headline-results (response)
+(defun elfeed-summary-db-display-headline-results (response)
   "Display headline search RESPONSE using completing-read."
   (let ((results (alist-get 'results response)))
 
@@ -991,7 +991,7 @@ With prefix arg, prompt for sort order interactively."
               (org-show-entry)
               (recenter))))))))
 
-(defun org-db-v3--char-to-line (filename char-pos)
+(defun elfeed-summary-db--char-to-line (filename char-pos)
   "Convert character position CHAR-POS in FILENAME to line number.
 Returns 1 if file doesn't exist."
   (if (file-exists-p filename)
@@ -1004,7 +1004,7 @@ Returns 1 if file doesn't exist."
 
 ;; Dynamic headline search (primary method)
 ;;
-;; `org-db-v3-headline-search' queries the database as you type, providing
+;; `elfeed-summary-db-headline-search' queries the database as you type, providing
 ;; instant filtering without loading all headlines upfront. This is much faster
 ;; for large databases (100K+ headlines).
 ;;
@@ -1015,84 +1015,84 @@ Returns 1 if file doesn't exist."
 ;; - Only fetches matching results (default limit: 100 per query)
 ;; - Results show formatted headline and filename
 ;;
-;; Usage: M-x org-db-v3-headline-search RET
+;; Usage: M-x elfeed-summary-db-headline-search RET
 ;; Then start typing to filter - results update as you type
 ;; With prefix arg (C-u): Choose sort order interactively
 ;;
-;; For browsing ALL headlines: M-x org-db-v3-headline-search-all
+;; For browsing ALL headlines: M-x elfeed-summary-db-headline-search-all
 ;; (loads everything upfront, slower for large databases)
 
-(defcustom org-db-v3-ivy-headline-limit 100
+(defcustom elfeed-summary-db-ivy-headline-limit 100
   "Number of headlines to fetch per query for ivy-based headline search.
 Used when querying the API dynamically as you type."
   :type 'integer
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defcustom org-db-v3-ivy-headline-min-query-length 2
+(defcustom elfeed-summary-db-ivy-headline-min-query-length 2
   "Minimum query length before searching headlines.
 Queries shorter than this will show all headlines (up to limit)."
   :type 'integer
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defvar org-db-v3--current-headline-sort "last_updated"
+(defvar elfeed-summary-db--current-headline-sort "last_updated"
   "Current sort order for headline search, can be set via prefix arg.")
 
-(defvar org-db-v3--last-headline-results nil
+(defvar elfeed-summary-db--last-headline-results nil
   "Cache of last headline search results for ivy actions.")
 
 ;;;###autoload
-(defun org-db-v3-headline-search (&optional sort-by)
+(defun elfeed-summary-db-headline-search (&optional sort-by)
   "Browse headlines with dynamic filtering - queries API as you type.
-Much faster than `org-db-v3-headline-search-all' for large databases.
+Much faster than `elfeed-summary-db-headline-search-all' for large databases.
 
 Start typing to filter headlines - results update dynamically.
 SORT-BY specifies sort order (filename, last_updated, or indexed_at).
 With prefix arg (C-u), prompts for sort order interactively.
 
-Requires ivy. Falls back to `org-db-v3-headline-search-all' if ivy not available."
+Requires ivy. Falls back to `elfeed-summary-db-headline-search-all' if ivy not available."
   (interactive
    (list (when current-prefix-arg
            (completing-read "Sort by: "
-                          '("filename" "last_updated" "indexed_at")
-                          nil t nil nil org-db-v3-headline-sort-order))))
+                            '("filename" "last_updated" "indexed_at")
+                            nil t nil nil elfeed-summary-db-headline-sort-order))))
 
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
   ;; Set current sort order for use in dynamic collection
-  (setq org-db-v3--current-headline-sort (or sort-by org-db-v3-headline-sort-order))
+  (setq elfeed-summary-db--current-headline-sort (or sort-by elfeed-summary-db-headline-sort-order))
 
   (if (fboundp 'ivy-read)
       (ivy-read "Headlines (dynamic filter): "
-                #'org-db-v3--dynamic-headline-collection
+                #'elfeed-summary-db--dynamic-headline-collection
                 :dynamic-collection t
-                :caller 'org-db-v3-headline-search
-                :action #'org-db-v3--open-headline-candidate)
+                :caller 'elfeed-summary-db-headline-search
+                :action #'elfeed-summary-db--open-headline-candidate)
     ;; Fallback to loading all headlines if ivy not available
     (message "Ivy not available, falling back to loading all headlines...")
-    (org-db-v3-headline-search-all sort-by)))
+    (elfeed-summary-db-headline-search-all sort-by)))
 
-(defun org-db-v3--dynamic-headline-collection (input)
+(defun elfeed-summary-db--dynamic-headline-collection (input)
   "Fetch headlines matching INPUT dynamically.
 Called by ivy as the user types. Returns a list of candidates."
   ;; Even for empty input, fetch some results (up to limit)
-  (let* ((scope-params (when (fboundp 'org-db-v3--scope-to-params)
-                         (org-db-v3--scope-to-params)))
+  (let* ((scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
+                         (elfeed-summary-db--scope-to-params)))
          (request-body (append `((query . ,input)
-                                (limit . ,org-db-v3-ivy-headline-limit)
-                                (sort_by . ,org-db-v3--current-headline-sort))
-                              (when scope-params
-                                (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
-                                      (cons 'keyword (plist-get scope-params :keyword))))))
+                                 (limit . ,elfeed-summary-db-ivy-headline-limit)
+                                 (sort_by . ,elfeed-summary-db--current-headline-sort))
+                               (when scope-params
+                                 (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                       (cons 'keyword (plist-get scope-params :keyword))))))
          ;; Synchronous request (required for dynamic collection)
          (response
           (condition-case err
               (let ((url-request-method "POST")
                     (url-request-extra-headers '(("Content-Type" . "application/json")))
                     (url-request-data (encode-coding-string
-                                      (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
-                                      'utf-8)))
+                                       (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
+                                       'utf-8)))
                 (let ((buffer (url-retrieve-synchronously
-                               (concat (org-db-v3-server-url) "/api/search/headlines")
+                               (concat (elfeed-summary-db-server-url) "/api/search/headlines")
                                t nil 5)))  ; 5 second timeout
                   (if (not buffer)
                       nil
@@ -1112,16 +1112,16 @@ Called by ivy as the user types. Returns a list of candidates."
               (list (format "No headlines found for: %s" input))
             ;; Store full results for later lookup by action function
             ;; Results format from server: (display_string filename begin)
-            (setq org-db-v3--last-headline-results results)
+            (setq elfeed-summary-db--last-headline-results results)
             ;; Return only display strings for ivy
             (mapcar #'car results)))
       ;; Error or no results
       (list (format "Search failed or no results for: %s" input)))))
 
-(defun org-db-v3--open-headline-candidate (candidate)
+(defun elfeed-summary-db--open-headline-candidate (candidate)
   "Open file for selected headline CANDIDATE.
 CANDIDATE is a display string. Look it up in cached results."
-  (let ((data (assoc candidate org-db-v3--last-headline-results)))
+  (let ((data (assoc candidate elfeed-summary-db--last-headline-results)))
     (if data
         (let ((file (cadr data))
               (begin (caddr data)))
@@ -1136,39 +1136,39 @@ CANDIDATE is a display string. Look it up in cached results."
 
 ;; Configure ivy for headline search if available
 (with-eval-after-load 'ivy
-  (ivy-configure 'org-db-v3-headline-search
-    :height 15
-    :sort-fn nil))  ; Keep sort order from API
+  (ivy-configure 'elfeed-summary-db-headline-search
+                 :height 15
+                 :sort-fn nil))  ; Keep sort order from API
 
 ;;;###autoload
-(defun org-db-v3-open-file ()
+(defun elfeed-summary-db-open-file ()
   "Browse all files in database and open selected file."
   (interactive)
 
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
-  (plz 'get (concat (org-db-v3-server-url) "/api/stats/files")
+  (plz 'get (concat (elfeed-summary-db-server-url) "/api/stats/files")
     :as #'json-read
     :then (lambda (response)
-            (org-db-v3-display-file-list response))
+            (elfeed-summary-db-display-file-list response))
     :else (lambda (error)
             (message "Error fetching files: %s" (plz-error-message error)))))
 
 ;;;###autoload
-(defun org-db-v3-open-linked-file ()
+(defun elfeed-summary-db-open-linked-file ()
   "Browse all linked files (PDF, DOCX, etc.) in database and open selected file or org link."
   (interactive)
 
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
-  (plz 'get (concat (org-db-v3-server-url) "/api/linked-files/all")
+  (plz 'get (concat (elfeed-summary-db-server-url) "/api/linked-files/all")
     :as #'json-read
     :then (lambda (response)
-            (org-db-v3-display-linked-file-list response))
+            (elfeed-summary-db-display-linked-file-list response))
     :else (lambda (error)
             (message "Error fetching linked files: %s" (plz-error-message error)))))
 
-(defun org-db-v3-display-file-list (response)
+(defun elfeed-summary-db-display-file-list (response)
   "Display file list from RESPONSE using completing-read."
   (let* ((files (alist-get 'files response))
          (count (alist-get 'count response)))
@@ -1186,12 +1186,12 @@ CANDIDATE is a display string. Look it up in cached results."
                  (indexed-at (alist-get 'indexed_at file-info))
                  ;; Format timestamp for display (remove microseconds if present)
                  (display-time (if indexed-at
-                                  (replace-regexp-in-string "\\..*" "" indexed-at)
-                                "unknown"))
+                                   (replace-regexp-in-string "\\..*" "" indexed-at)
+                                 "unknown"))
                  ;; Format: timestamp | filename
                  (candidate (format "%s | %s"
-                                   display-time
-                                   filename)))
+                                    display-time
+                                    filename)))
 
             ;; Store metadata
             (puthash candidate filename metadata-table)
@@ -1202,16 +1202,16 @@ CANDIDATE is a display string. Look it up in cached results."
 
         ;; Let user select
         (let ((selection (completing-read
-                         (format "Open file (%d files in database): " count)
-                         candidates
-                         nil t)))
+                          (format "Open file (%d files in database): " count)
+                          candidates
+                          nil t)))
           (when selection
             (let ((file (gethash selection metadata-table)))
               (if (and file (file-exists-p file))
                   (find-file file)
                 (message "File does not exist: %s" file)))))))))
 
-(defun org-db-v3-display-linked-file-list (response)
+(defun elfeed-summary-db-display-linked-file-list (response)
   "Display linked file list from RESPONSE using completing-read."
   (let* ((linked-files (alist-get 'linked_files response))
          (count (alist-get 'count response)))
@@ -1233,23 +1233,23 @@ CANDIDATE is a display string. Look it up in cached results."
                  (indexed-at (alist-get 'indexed_at file-info))
                  ;; Format timestamp for display (remove microseconds if present)
                  (display-time (if indexed-at
-                                  (replace-regexp-in-string "\\..*" "" indexed-at)
-                                "unknown"))
+                                   (replace-regexp-in-string "\\..*" "" indexed-at)
+                                 "unknown"))
                  ;; Format: [TYPE] filename | org-file:line | chunks | timestamp
                  (candidate (format "[%-4s] %-40s | %s:%d | %d chunks | %s"
-                                   (upcase (or file-type ""))
-                                   (file-name-nondirectory file-path)
-                                   (file-name-nondirectory org-filename)
-                                   org-link-line
-                                   chunk-count
-                                   display-time)))
+                                    (upcase (or file-type ""))
+                                    (file-name-nondirectory file-path)
+                                    (file-name-nondirectory org-filename)
+                                    org-link-line
+                                    chunk-count
+                                    display-time)))
 
             ;; Store metadata
             (puthash candidate
-                    (list :file-path file-path
-                          :org-filename org-filename
-                          :org-link-line org-link-line)
-                    metadata-table)
+                     (list :file-path file-path
+                           :org-filename org-filename
+                           :org-link-line org-link-line)
+                     metadata-table)
             (push candidate candidates)))
 
         ;; Keep chronological order (most recent first, already sorted from server)
@@ -1257,9 +1257,9 @@ CANDIDATE is a display string. Look it up in cached results."
 
         ;; Let user select
         (let ((selection (completing-read
-                         (format "Open linked file (%d files in database): " count)
-                         candidates
-                         nil t)))
+                          (format "Open linked file (%d files in database): " count)
+                          candidates
+                          nil t)))
           (when selection
             (let* ((metadata (gethash selection metadata-table))
                    (file-path (plist-get metadata :file-path))
@@ -1279,7 +1279,7 @@ CANDIDATE is a display string. Look it up in cached results."
                   (recenter))))))))))
 
 ;;;###autoload
-(defun org-db-v3-property-search (query)
+(defun elfeed-summary-db-property-search (query)
   "Search headlines by property name and optional value.
 QUERY should be in format \"PROPERTY=PATTERN\" or just \"PROPERTY\".
 Examples:
@@ -1288,37 +1288,37 @@ Examples:
   CATEGORY           Search for any headline with CATEGORY property"
   (interactive "sProperty search (PROPERTY or PROPERTY=PATTERN): ")
 
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
   ;; Parse query to extract property and optional value pattern
   (let* ((parts (split-string query "=" t))
          (property (string-trim (car parts)))
          (value (when (cdr parts) (string-trim (cadr parts))))
-         (scope-params (when (fboundp 'org-db-v3--scope-to-params)
-                         (org-db-v3--scope-to-params)))
+         (scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
+                         (elfeed-summary-db--scope-to-params)))
          (request-body (append `((property . ,property)
-                                (limit . 100))
-                              (when value
-                                (list (cons 'value value)))
-                              (when scope-params
-                                (list (cons 'filename_pattern (plist-get scope-params :filename_pattern)))))))
+                                 (limit . 100))
+                               (when value
+                                 (list (cons 'value value)))
+                               (when scope-params
+                                 (list (cons 'filename_pattern (plist-get scope-params :filename_pattern)))))))
 
-    (plz 'post (concat (org-db-v3-server-url) "/api/search/properties")
+    (plz 'post (concat (elfeed-summary-db-server-url) "/api/search/properties")
       :headers '(("Content-Type" . "application/json"))
       :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
       :as #'json-read
       :then (lambda (response)
               ;; Reset scope after search
-              (when (boundp 'org-db-v3-search-scope)
-                (setq org-db-v3-search-scope '(all . nil)))
-              (org-db-v3-display-property-results query response))
+              (when (boundp 'elfeed-summary-db-search-scope)
+                (setq elfeed-summary-db-search-scope '(all . nil)))
+              (elfeed-summary-db-display-property-results query response))
       :else (lambda (error)
               ;; Reset scope even on error
-              (when (boundp 'org-db-v3-search-scope)
-                (setq org-db-v3-search-scope '(all . nil)))
+              (when (boundp 'elfeed-summary-db-search-scope)
+                (setq elfeed-summary-db-search-scope '(all . nil)))
               (message "Search error: %s" (plz-error-message error))))))
 
-(defun org-db-v3-display-property-results (query response)
+(defun elfeed-summary-db-display-property-results (query response)
   "Display property search RESPONSE for QUERY using completing-read."
   (let ((results (alist-get 'results response)))
 
@@ -1340,29 +1340,29 @@ Examples:
                  (title-width 40)
                  (value-width 20)
                  (display-title (if (> (length headline-title) title-width)
-                                   (concat (substring headline-title 0 (- title-width 3)) "...")
-                                 headline-title))
+                                    (concat (substring headline-title 0 (- title-width 3)) "...")
+                                  headline-title))
                  (padded-title (format (format "%%-%ds" title-width) display-title))
                  (display-value (if (> (length value) value-width)
-                                   (concat (substring value 0 (- value-width 3)) "...")
-                                 value))
+                                    (concat (substring value 0 (- value-width 3)) "...")
+                                  value))
                  (padded-value (format (format "%%-%ds" value-width) display-value))
                  ;; Calculate line number from character position
-                 (line-number (org-db-v3--char-to-line filename begin))
+                 (line-number (elfeed-summary-db--char-to-line filename begin))
                  ;; Format: property=value | headline | filename:line
                  (candidate (format "%s=%-20s | %s | %s:%d"
-                                   property
-                                   padded-value
-                                   padded-title
-                                   filename
-                                   line-number)))
+                                    property
+                                    padded-value
+                                    padded-title
+                                    filename
+                                    line-number)))
 
             ;; Store metadata
             (puthash candidate
-                    (list :file filename
-                          :begin begin
-                          :line line-number)
-                    metadata-table)
+                     (list :file filename
+                           :begin begin
+                           :line line-number)
+                     metadata-table)
             (push candidate candidates)))
 
         ;; Keep original order (by filename and position)
@@ -1370,9 +1370,9 @@ Examples:
 
         ;; Let user select
         (let ((selection (completing-read
-                         (format "Property results (%d found): " (length results))
-                         candidates
-                         nil t)))
+                          (format "Property results (%d found): " (length results))
+                          candidates
+                          nil t)))
           (when selection
             (let* ((metadata (gethash selection metadata-table))
                    (file (plist-get metadata :file))
@@ -1383,5 +1383,5 @@ Examples:
                 (org-show-entry)
                 (recenter)))))))))
 
-(provide 'org-db-v3-search)
-;;; org-db-v3-search.el ends here
+(provide 'elfeed-summary-db-search)
+;;; elfeed-summary-db-search.el ends here
