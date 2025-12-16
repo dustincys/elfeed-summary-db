@@ -7,39 +7,38 @@
 
 (require 'plz)
 (require 'json)
-;; (require 'org-db-v3)
-(require 'org-db-v3-parse)
-(require 'org-db-v3-server)
+(require 'elfeed-summary-db-parse)
+(require 'elfeed-summary-db-server)
 
 ;; Queue for non-blocking directory indexing
-(defvar org-db-v3-index-queue nil
+(defvar elfeed-summary-db-index-queue nil
   "Queue of files waiting to be indexed.")
 
-(defvar org-db-v3-index-timer nil
+(defvar elfeed-summary-db-index-timer nil
   "Timer for processing the index queue.")
 
-(defvar org-db-v3-index-total 0
+(defvar elfeed-summary-db-index-total 0
   "Total number of files in current indexing operation.")
 
-(defvar org-db-v3-index-processed 0
+(defvar elfeed-summary-db-index-processed 0
   "Number of files processed in current indexing operation.")
 
-(defcustom org-db-v3-index-delay 0.5
+(defcustom elfeed-summary-db-index-delay 0.5
   "Delay in seconds between indexing files.
 Lower values = faster indexing but less responsive Emacs and higher server load.
 Higher values = slower indexing but more responsive Emacs and prevents server overload.
 Default 0.5s allows time for linked file processing to complete."
   :type 'number
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defcustom org-db-v3-index-timeout 240
+(defcustom elfeed-summary-db-index-timeout 240
   "Timeout in seconds for indexing a single file.
 Files with many large linked files (PDFs, images) may take longer to process.
 Default 240 seconds (4 minutes). Files that timeout will be skipped."
   :type 'number
-  :group 'org-db-v3)
+  :group 'elfeed-summary-db)
 
-(defvar org-db-v3-index-failed-files nil
+(defvar elfeed-summary-db-index-failed-files nil
   "List of files that failed to index in the current operation.")
 
 (defun elfeed-summary-db-index-entry-async (entry_id)
@@ -50,290 +49,217 @@ Skips Emacs temporary files (.#*, #*#, *~) and remote Tramp files."
 
   ;; Skip entry without summary
   (when (elfeed-meta elfeed-show-entry :summary)
-    (error "Skipping entry that no summaried: %s" (elfeed-entry-title entry)))
+    (error "Skipping entry that has no summary: %s" (elfeed-entry-title entry)))
 
-  (let ((basename (file-name-nondirectory filename)))
-    ;; Skip Emacs temporary files
-    (when (or (string-prefix-p ".#" basename)
-              (and (string-prefix-p "#" basename)
-                   (string-suffix-p "#" basename))
-              (string-suffix-p "~" basename))
-      (error "Skipping Emacs temporary file: %s" filename)))
+  (let ((json-data (elfeed-summary-db-parse-entry-to-json entry_id)))
+    (plz 'post (concat (elfeed-summary-db-server-url) "/api/entry")
+      :headers '(("Content-Type" . "application/json"))
+      :body json-data
+      :as #'json-read
+      :timeout 120  ; Allow time for docling PDF/DOCX conversion
+      :then (lambda (response)
+              (let ((entry_id (alist-get 'entry_id response))
+                    (status (alist-get 'statue response)))
+                (message "Indexed %s, status %s" entry_id status)))
+      :else (lambda (error)
+              (message "Error indexing %s: %s" entry_id status))))
+  )
 
-  (when (file-exists-p filename)
-    (let ((already-open (find-buffer-visiting filename))
-          buf)
-      ;; Bind these BEFORE opening the file so they take effect during file loading
-      (let ((enable-local-variables nil)  ; Don't evaluate local variables
-            (enable-dir-local-variables nil)  ; Don't evaluate directory-local variables
-            (org-mode-hook '()))  ; Skip org-mode hooks
-        (setq buf (or already-open (find-file-noselect filename))))
-
-      (with-current-buffer buf
-        (let ((json-data (org-db-v3-parse-buffer-to-json)))
-          (plz 'post (concat (org-db-v3-server-url) "/api/file")
-            :headers '(("Content-Type" . "application/json"))
-            :body json-data
-            :as #'json-read
-            :timeout 120  ; Allow time for docling PDF/DOCX conversion
-            :then (lambda (response)
-                    (let ((headlines (alist-get 'headlines_count response))
-                          (linked-files (alist-get 'linked_files_count response 0)))
-                      (if (> linked-files 0)
-                          (message "Indexed %s (%d headlines, %d linked file%s)"
-                                   filename headlines linked-files
-                                   (if (= linked-files 1) "" "s"))
-                        (message "Indexed %s (%d headlines)"
-                                 filename headlines))))
-            :else (lambda (error)
-                    (message "Error indexing %s: %s" filename error))))
-        ;; Kill buffer if it wasn't already open
-        (unless already-open
-          (kill-buffer buf))))))
-
-(defun org-db-v3-process-index-queue ()
+(defun elfeed-summary-db-process-index-queue ()
   "Process one file from the index queue.
-Waits for each request to complete before processing the next file."
-  (if org-db-v3-index-queue
-      (let ((filename (pop org-db-v3-index-queue)))
-        (setq org-db-v3-index-processed (1+ org-db-v3-index-processed))
+Waits for each request to complete before processing the next entry."
+  (if elfeed-summary-db-index-queue
+      (let ((entry_id (pop elfeed-summary-db-index-queue)))
+        (setq elfeed-summary-db-index-processed (1+ elfeed-summary-db-index-processed))
 
         ;; Update progress in echo area
         (message "Indexing [%d/%d]: %s"
-                 org-db-v3-index-processed
-                 org-db-v3-index-total
-                 (file-name-nondirectory filename))
+                 elfeed-summary-db-index-processed
+                 elfeed-summary-db-index-total
+                 (elfeed-entry-title (elfeed-db-get-entry entry_id)))
 
-        ;; Index the file and continue queue on completion
-        (org-db-v3-index-file-with-continuation filename))
+        (elfeed-summary-db-index-file-with-continuation entry_id))
     ;; Queue is empty, clean up
-    (setq org-db-v3-index-timer nil)
-    (if org-db-v3-index-failed-files
-        (message "Indexing complete: %d file%s processed, %d failed (see *Messages* for details)"
-                 org-db-v3-index-total
-                 (if (= org-db-v3-index-total 1) "" "s")
-                 (length org-db-v3-index-failed-files))
+    (setq elfeed-summary-db-index-timer nil)
+    (if elfeed-summary-db-index-failed-entries
+        (message "Indexing complete: %d entries %s processed, %d failed (see *Messages* for details)"
+                 elfeed-summary-db-index-total
+                 (if (= elfeed-summary-db-index-total 1) "" "s")
+                 (length elfeed-summary-db-index-failed-files))
       (message "Indexing complete: %d file%s processed"
-               org-db-v3-index-total
-               (if (= org-db-v3-index-total 1) "" "s")))))
+               elfeed-summary-db-index-total
+               (if (= elfeed-summary-db-index-total 1) "" "s")))))
 
-(defun org-db-v3-index-file-with-continuation (filename)
-  "Index FILENAME and continue processing queue on completion.
+(defun elfeed-summary-db-index-file-with-continuation (entry_id)
+  "Index ENTRY_ID and continue processing queue on completion.
 This ensures requests are processed sequentially, not in parallel.
 Wraps processing in error handling to prevent queue stalls."
   ;; Wrap everything in condition-case to ensure queue continues even on unexpected errors
   (condition-case err
       (progn
-        (org-db-v3-ensure-server)
+        (elfeed-summary-db-ensure-server)
 
-        ;; Skip remote Tramp files
-        (if (file-remote-p filename)
-            (progn
-              (message "Skipping remote Tramp file: %s" filename)
-              ;; Continue with next file in queue
-              (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))
+        ;; Skip entries with no summary
 
-          (let ((basename (file-name-nondirectory filename)))
-            ;; Skip Emacs temporary files
-            (when (or (string-prefix-p ".#" basename)
-                      (and (string-prefix-p "#" basename)
-                           (string-suffix-p "#" basename))
-                      (string-suffix-p "~" basename))
-              (message "Skipping Emacs temporary file: %s" filename)
-              (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue)
-              (error "Skip temporary file")))
-
-          (if (not (file-exists-p filename))
+        (let* ((entry (elfeed-db-get-entry entry_id))
+               (summary (elfeed-meta entry :summary))
+               (title (elfeed-entry-title entry)))
+          (if (not summary)
               (progn
-                (message "File does not exist, skipping: %s" filename)
-                (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))
-
-            (let ((already-open (find-buffer-visiting filename))
-                  buf)
-              ;; Bind these BEFORE opening the file so they take effect during file loading
-              (let ((enable-local-variables nil)  ; Don't evaluate local variables
-                    (enable-dir-local-variables nil)  ; Don't evaluate directory-local variables
-                    (org-mode-hook '()))  ; Skip org-mode hooks
-                (setq buf (or already-open (find-file-noselect filename))))
-
-              (with-current-buffer buf
-                (let ((json-data (org-db-v3-parse-buffer-to-json)))
-                  (plz 'post (concat (org-db-v3-server-url) "/api/file")
-                    :headers '(("Content-Type" . "application/json"))
-                    :body json-data
-                    :as #'json-read
-                    :timeout org-db-v3-index-timeout  ; Configurable timeout
-                    :then (lambda (response)
-                            (let ((headlines (alist-get 'headlines_count response))
-                                  (linked-files (alist-get 'linked_files_count response 0)))
-                              (if (> linked-files 0)
-                                  (message "Indexed %s (%d headlines, %d linked file%s)"
-                                           filename headlines linked-files
-                                           (if (= linked-files 1) "" "s"))
-                                (message "Indexed %s (%d headlines)"
-                                         filename headlines)))
-                            ;; Process next file in queue after this one completes
-                            (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))
-                    :else (lambda (error)
-                            ;; Track failed files
-                            (push filename org-db-v3-index-failed-files)
-                            ;; Check if it's a timeout
-                            (if (and (listp error) (eq (car error) 28))
-                                (message "Timeout indexing %s (exceeded %d seconds)"
-                                         (file-name-nondirectory filename)
-                                         org-db-v3-index-timeout)
-                              (message "Error indexing %s: %s"
-                                       (file-name-nondirectory filename) error))
-                            ;; Continue with next file even on error
-                            (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))))
-                ;; Kill buffer if it wasn't already open
-                (unless already-open
-                  (kill-buffer buf)))))))
+                (message "Skipping entry that has no summary: %s" title)
+                ;; Continue with next file in queue
+                (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue))
+            (let ((json-data (elfeed-summary-db-parse-buffer-to-json)))
+              (plz 'post (concat (elfeed-summary-db-server-url) "/api/file")
+                :headers '(("Content-Type" . "application/json"))
+                :body json-data
+                :as #'json-read
+                :timeout elfeed-summary-db-index-timeout  ; Configurable timeout
+                :then (lambda (response)
+                        (message "Indexed %s, status %s" (alist-get 'entry_id response) (alist-get 'statue response))
+                        ;; Process next file in queue after this one completes
+                        (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue))
+                :else (lambda (error)
+                        ;; Track failed files
+                        (push entry_id elfeed-summary-db-index-failed-entries)
+                        ;; Check if it's a timeout
+                        (if (and (listp error) (eq (car error) 28))
+                            (message "Timeout indexing %s (exceeded %d seconds)"
+                                     title
+                                     elfeed-summary-db-index-timeout)
+                          (message "Error indexing %s: %s"
+                                   (file-name-nondirectory filename) error))
+                        ;; Continue with next file even on error
+                        (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue)))))))
     ;; Catch any unexpected errors and continue queue processing
     (error
-     (message "Unexpected error processing %s: %S - continuing queue" filename err)
-     (run-with-timer org-db-v3-index-delay nil #'org-db-v3-process-index-queue))))
+     (message "Unexpected error processing %s: %S - continuing queue" entry_id err)
+     (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue))))
 
 ;;;###autoload
-(defun org-db-v3-index-directory (directory)
-  "Recursively index all org files in DIRECTORY.
-Files are processed one at a time using timers to keep Emacs responsive.
-Skips remote Tramp files."
-  (interactive "DDirectory to index: ")
-  (let* ((all-files (directory-files-recursively
-                     directory
-                     "\\.org\\(\\.gpg\\)?\\'"
-                     nil
-                     (lambda (dir)
-                       ;; Skip hidden directories and common ignore patterns
-                       (not (string-match-p "/\\." (file-name-nondirectory dir))))))
-         ;; Filter out Emacs temporary files and Tramp remote files
-         (org-files (seq-filter
-                     (lambda (file)
-                       (let ((basename (file-name-nondirectory file)))
-                         (not (or
-                               ;; Remote Tramp files
-                               (file-remote-p file)
-                               ;; Emacs lock files: .#filename.org
-                               (string-prefix-p ".#" basename)
-                               ;; Emacs auto-save files: #filename.org#
-                               (and (string-prefix-p "#" basename)
-                                    (string-suffix-p "#" basename))
-                               ;; Emacs backup files: filename.org~
-                               (string-suffix-p "~" basename)))))
-                     all-files))
-         (count (length org-files)))
-    (if (zerop count)
-        (message "No org files found in %s" directory)
-      (when (yes-or-no-p (format "Index %d org file%s in %s? "
-                                 count
-                                 (if (= count 1) "" "s")
-                                 directory))
-        ;; Check if indexing is already in progress
-        (when org-db-v3-index-timer
-          (message "Indexing already in progress, please wait or cancel first")
-          (user-error "Indexing already in progress"))
+(defun elfeed-summary-db-index-elfeed ()
+  "Recursively index all entries in elfeed db.
+Entries are processed one at a time using timers to keep Emacs responsive.
+Skips entries with no summary."
+  (interactive "Index whole elfeed")
 
-        ;; Set up the queue
-        (setq org-db-v3-index-queue org-files
-              org-db-v3-index-total count
-              org-db-v3-index-processed 0
-              org-db-v3-index-failed-files nil)  ; Reset failed files list
+  (when (yes-or-no-p "Index whole elfeed?")
+    ;; Check if indexing is already in progress
+    (when elfeed-summary-db-index-timer
+      (message "Indexing already in progress, please wait or cancel first")
+      (user-error "Indexing already in progress"))
 
-        ;; Start processing first file (continuation handled in callback)
-        (setq org-db-v3-index-timer t)  ; Marker that indexing is active
-        (run-with-timer 0 nil #'org-db-v3-process-index-queue)
+    ;; 1. Collect all valid entries into a list
+    (let ((all-entries '()))
+      (with-elfeed-db-visit (entry _)
+        (let ((summary (elfeed-meta entry :summary)))
+          ;; Check your conditions (must have a summary)
+          (when (and summary (stringp summary) (not (string-empty-p summary)))
+            (push entry all-entries))))
 
-        (message "Starting sequential indexing of %d file%s..."
+      ;; 2. Reverse the list (push adds to front) and calculate count
+      (setq all-entries (nreverse all-entries))
+
+      (let ((count (length all-entries)))
+        ;; 3. Set up the queue using the collected entries
+        (setq elfeed-summary-db-index-queue all-entries
+              elfeed-summary-db-index-total count
+              elfeed-summary-db-index-processed 0
+              elfeed-summary-db-index-failed-files nil) ; Reset failed list
+
+        ;; 4. Start processing
+        (setq elfeed-summary-db-index-timer t) ; Marker that indexing is active
+        (run-with-timer 0 nil #'elfeed-summary-db-process-index-queue)
+
+        (message "Starting sequential indexing of %d entr%s..."
                  count
-                 (if (= count 1) "" "s"))))))
+                 (if (= count 1) "y" "ies"))))))
 
 ;;;###autoload
-(defun org-db-v3-reindex-database ()
-  "Reindex all files currently in the database.
-Fetches the list of files from the server and reindexes each one.
-Also removes files that no longer exist from the database.
+(defun elfeed-summary-db-reindex-database ()
+  "Reindex all entries currently in the database.
+Fetches the list of entries from the server and reindexes each one.
 Uses non-blocking queue processing to keep Emacs responsive.
-Skips remote Tramp files."
+Skips entries with no summary."
   (interactive)
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
-  (plz 'get (concat (org-db-v3-server-url) "/api/files")
+  (plz 'get (concat (elfeed-summary-db-server-url) "/api/files")
     :as #'json-read
     :then (lambda (response)
-            (let* ((files (alist-get 'files response))
-                   (count (length files))
-                   (missing-files nil)
-                   (existing-files nil)
-                   (remote-files nil))
+            (let* ((entries (alist-get 'entry_id response))
+                   (count (length entries))
+                   (missing-entries nil)
+                   (existing-entries nil)
+                   (entries_with_no_summary nil))
 
-              ;; Classify files as existing, missing, or remote
+              ;; Classify entries as existing, missing, or no summary
               (dotimes (i count)
-                (let ((filename (alist-get 'filename (elt files i))))
+                (let ((entry_id (elt entries i)))
                   (cond
-                   ((file-remote-p filename)
-                    (push filename remote-files))
-                   ((file-exists-p filename)
-                    (push filename existing-files))
+                   ((not (summary (elfeed-meta (elfeed-db-get-entry entry_id) :summary)))
+                    (push entry_id entries_with_no_summary))
+                   ((elfeed-db-get-entry entry_id)
+                    (push entry_id existing-entries))
                    (t
-                    (push filename missing-files)))))
+                    (push entry_id missing-entries)))))
 
               (if (zerop count)
                   (message "No files found in database")
 
                 ;; Show summary and confirm
-                (let ((msg (format "Reindex %d existing file%s%s%s? "
-                                   (length existing-files)
-                                   (if (= (length existing-files) 1) "" "s")
-                                   (if missing-files
+                (let ((msg (format "Reindex %d existing entr%s%s%s? "
+                                   (length existing-entries)
+                                   (if (= (length existing-entries) 1) "y" "ies")
+                                   (if missing-entries
                                        (format ", remove %d missing file%s"
                                                (length missing-files)
                                                (if (= (length missing-files) 1) "" "s"))
                                      "")
-                                   (if remote-files
-                                       (format ", skip %d remote file%s"
-                                               (length remote-files)
-                                               (if (= (length remote-files) 1) "" "s"))
+                                   (if entries_with_no_summary
+                                       (format ", skip %d entr%s"
+                                               (length entries_with_no_summary)
+                                               (if (= (length entries_with_no_summary) 1) "y" "ies"))
                                      ""))))
                   (when (yes-or-no-p msg)
                     ;; Delete missing files from database immediately
-                    (when missing-files
-                      (message "Removing %d missing file%s from database..."
-                               (length missing-files)
-                               (if (= (length missing-files) 1) "" "s"))
-                      (dolist (filename missing-files)
-                        (org-db-v3-delete-file-async filename)))
+                    (when missing-entries
+                      (message "Removing %d missing entr%s from database..."
+                               (length missing-entries)
+                               (if (= (length missing-entries) 1) "y" "ies"))
+                      (dolist (entry_id missing-entries)
+                        (elfeed-summary-db-delete-entry-async entry_id)))
 
                     ;; Remove remote files from database
-                    (when remote-files
-                      (message "Removing %d remote file%s from database..."
-                               (length remote-files)
-                               (if (= (length remote-files) 1) "" "s"))
-                      (dolist (filename remote-files)
-                        (org-db-v3-delete-file-async filename)))
+                    (when entries_with_no_summary
+                      (message "Removing %d remote entr%s from database..."
+                               (length entries_with_no_summary)
+                               (if (= (length entries_with_no_summary) 1) "y" "ies"))
+                      (dolist (filename entries_with_no_summary)
+                        (elfeed-summary-db-delete-entry-async filename)))
 
-                    ;; Reindex existing files using non-blocking queue
-                    (when existing-files
+                    ;; Reindex existing entries using non-blocking queue
+                    (when existing-entries
                       ;; Check if indexing is already in progress
-                      (when org-db-v3-index-timer
+                      (when elfeed-summary-db-index-timer
                         (message "Indexing already in progress, please wait or cancel first")
                         (user-error "Indexing already in progress"))
 
                       ;; Set up the queue
-                      (setq org-db-v3-index-queue existing-files
-                            org-db-v3-index-total (length existing-files)
-                            org-db-v3-index-processed 0
-                            org-db-v3-index-failed-files nil)  ; Reset failed files list
+                      (setq elfeed-summary-db-index-queue existing-entries
+                            elfeed-summary-db-index-total (length existing-entries)
+                            elfeed-summary-db-index-processed 0
+                            elfeed-summary-db-index-failed-files nil)  ; Reset failed files list
 
                       ;; Start processing first file (continuation handled in callback)
-                      (setq org-db-v3-index-timer t)  ; Marker that indexing is active
-                      (run-with-timer 0 nil #'org-db-v3-process-index-queue)
+                      (setq elfeed-summary-db-index-timer t)  ; Marker that indexing is active
+                      (run-with-timer 0 nil #'elfeed-summary-db-process-index-queue)
 
-                      (message "Starting sequential reindex of %d file%s..."
-                               (length existing-files)
-                               (if (= (length existing-files) 1) "" "s"))))))))
+                      (message "Starting sequential reindex of %d entr%s..."
+                               (length existing-entries)
+                               (if (= (length existing-entries) 1) "y" "ies"))))))))
     :else (lambda (error)
-            (message "Error fetching file list: %s" (plz-error-message error)))))
+            (message "Error fetching entry list: %s" (plz-error-message error)))))
 
 (defun org-db-v3-delete-file-async (filename)
   "Delete FILENAME from the database asynchronously."
