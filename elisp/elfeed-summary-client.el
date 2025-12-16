@@ -1,4 +1,4 @@
-;;; org-db-v3-client.el --- HTTP client for org-db -*- lexical-binding: t; -*-
+;;; elfeed-summary-db-client.el --- HTTP client for org-db -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;; Async HTTP client using plz.el to communicate with the server.
@@ -261,82 +261,82 @@ Skips entries with no summary."
     :else (lambda (error)
             (message "Error fetching entry list: %s" (plz-error-message error)))))
 
-(defun org-db-v3-delete-file-async (filename)
-  "Delete FILENAME from the database asynchronously."
-  (plz 'delete (concat (org-db-v3-server-url) "/api/file?filename=" (url-hexify-string filename))
+(defun elfeed-summary-db-delete-entry-async (entry_id)
+  "Delete ENTRY_ID from the database asynchronously."
+  (plz 'delete (concat (elfeed-summary-db-server-url) "/api/entry?entry_id=" (url-hexify-string entry_id))
     :as #'json-read
     :then (lambda (response)
-            (message "Removed %s from database" filename))
+            (message "Removed %s from database" entry_id))
     :else (lambda (error)
-            (message "Error removing %s: %s" filename (plz-error-message error)))))
+            (message "Error removing %s: %s" entry_id (plz-error-message error)))))
 
 ;;;###autoload
-(defun org-db-v3-cancel-indexing ()
+(defun elfeed-summary-db-cancel-indexing ()
   "Cancel the current indexing operation."
   (interactive)
-  (if org-db-v3-index-timer
+  (if elfeed-summary-db-index-timer
       (progn
-        (setq org-db-v3-index-timer nil)
+        (setq elfeed-summary-db-index-timer nil)
         (message "Indexing cancelled: %d of %d files processed"
-                 org-db-v3-index-processed
-                 org-db-v3-index-total)
-        (setq org-db-v3-index-queue nil
-              org-db-v3-index-total 0
-              org-db-v3-index-processed 0))
+                 elfeed-summary-db-index-processed
+                 elfeed-summary-db-index-total)
+        (setq elfeed-summary-db-index-queue nil
+              elfeed-summary-db-index-total 0
+              elfeed-summary-db-index-processed 0))
     (message "No indexing operation in progress")))
 
 ;;;###autoload
-(defun org-db-v3-resume-indexing ()
+(defun elfeed-summary-db-resume-indexing ()
   "Resume a stuck or paused indexing operation.
 If indexing has stalled, this will restart processing the remaining queue."
   (interactive)
   (cond
    ;; No indexing operation at all
-   ((not org-db-v3-index-timer)
+   ((not elfeed-summary-db-index-timer)
     (message "No indexing operation to resume"))
 
    ;; Queue is empty but timer is set (shouldn't happen, but clean up)
-   ((null org-db-v3-index-queue)
+   ((null elfeed-summary-db-index-queue)
     (message "Indexing queue is empty, clearing status...")
-    (setq org-db-v3-index-timer nil
-          org-db-v3-index-total 0
-          org-db-v3-index-processed 0))
+    (setq elfeed-summary-db-index-timer nil
+          elfeed-summary-db-index-total 0
+          elfeed-summary-db-index-processed 0))
 
    ;; Valid queue exists, resume processing
    (t
     (message "Resuming indexing: %d files remaining (processed %d of %d)"
-             (length org-db-v3-index-queue)
-             org-db-v3-index-processed
-             org-db-v3-index-total)
-    (run-with-timer 0 nil #'org-db-v3-process-index-queue))))
+             (length elfeed-summary-db-index-queue)
+             elfeed-summary-db-index-processed
+             elfeed-summary-db-index-total)
+    (run-with-timer 0 nil #'elfeed-summary-db-process-index-queue))))
 
 ;;;###autoload
-(defun org-db-v3-indexing-status ()
+(defun elfeed-summary-db-indexing-status ()
   "Show the status of the current indexing operation."
   (interactive)
-  (if org-db-v3-index-timer
+  (if elfeed-summary-db-index-timer
       (message "Indexing in progress: %d/%d files processed, %d remaining in queue%s"
-               org-db-v3-index-processed
-               org-db-v3-index-total
-               (length org-db-v3-index-queue)
-               (if org-db-v3-index-failed-files
-                   (format ", %d failed" (length org-db-v3-index-failed-files))
+               elfeed-summary-db-index-processed
+               elfeed-summary-db-index-total
+               (length elfeed-summary-db-index-queue)
+               (if elfeed-summary-db-index-failed-files
+                   (format ", %d failed" (length elfeed-summary-db-index-failed-files))
                  ""))
     (message "No indexing operation in progress")))
 
 ;;;###autoload
-(defun org-db-v3-show-failed-files ()
-  "Show list of files that failed to index in the last operation."
+(defun elfeed-summary-db-show-failed-entries ()
+  "Show list of entries that failed to index in the last operation."
   (interactive)
-  (if org-db-v3-index-failed-files
-      (with-output-to-temp-buffer "*org-db-v3-failed-files*"
-        (princ (format "Failed to index %d file(s):\n\n" (length org-db-v3-index-failed-files)))
-        (dolist (file org-db-v3-index-failed-files)
+  (if elfeed-summary-db-index-failed-entries
+      (with-output-to-temp-buffer "*elfeed-summary-db-failed-entries*"
+        (princ (format "Failed to index %d entry(entries):\n\n" (length elfeed-summary-db-index-failed-entries)))
+        (dolist (file elfeed-summary-db-index-failed-entries)
           (princ (format "  %s\n" file))))
-    (message "No failed files in last indexing operation")))
+    (message "No failed entries in last indexing operation")))
 
 ;;;###autoload
-(defun org-db-v3-cleanup-stale-processes ()
+(defun elfeed-summary-db-cleanup-stale-processes ()
   "Clean up stale HTTP and curl processes from failed requests.
 Only removes processes that are clearly failed or stuck.
 Safe to run while indexing is in progress."
@@ -357,7 +357,7 @@ Safe to run while indexing is in progress."
       (message "No stale processes found"))))
 
 ;;;###autoload
-(defun org-db-v3-clear-database ()
+(defun elfeed-summary-db-clear-database ()
   "Clear the entire database by removing the database file.
 
 WARNING: This is destructive and cannot be undone!
@@ -365,10 +365,10 @@ All indexed data will be permanently deleted.
 
 Prompts for confirmation before proceeding."
   (interactive)
-  (org-db-v3-ensure-server)
+  (elfeed-summary-db-ensure-server)
 
   (when (yes-or-no-p "Clear entire database? This cannot be undone! ")
-    (plz 'delete (concat (org-db-v3-server-url) "/api/stats/clear-database")
+    (plz 'delete (concat (elfeed-summary-db-server-url) "/api/stats/clear-database")
       :as #'json-read
       :then (lambda (response)
               (let ((status (alist-get 'status response))
@@ -380,5 +380,5 @@ Prompts for confirmation before proceeding."
       :else (lambda (error)
               (message "Error clearing database: %s" (plz-error-message error))))))
 
-(provide 'org-db-v3-client)
-;;; org-db-v3-client.el ends here
+(provide 'elfeed-summary-db-client)
+;;; elfeed-summary-db-client.el ends here
