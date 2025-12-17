@@ -94,7 +94,8 @@ async def semantic_search(request: SemanticSearchRequest):
                     e.embedding_vector,
                     c.chunk_text,
                     c.chunk_type,
-                    c.title
+                    c.title,
+                    c.entry_id
                 FROM embeddings e
                 JOIN chunks c ON e.chunk_id = c.rowid
             """
@@ -125,7 +126,8 @@ async def semantic_search(request: SemanticSearchRequest):
                 embedding_bytes = row[1]
                 chunk_text = row[2]
                 chunk_type = row[3]
-                title = row[6]
+                title = row[4]
+                entry_id=row[5]
 
                 stored_embedding = np.frombuffer(embedding_bytes,
                                                  dtype=np.float32)
@@ -139,7 +141,8 @@ async def semantic_search(request: SemanticSearchRequest):
                                   chunk_text=chunk_text,
                                   similarity_score=similarity,
                                   title=title,
-                                  chunk_type=chunk_type)))
+                                  chunk_type=chunk_type,
+                                  entry_id=entry_id)))
 
             # Sort by similarity (highest first) and take top N
             results_with_scores.sort(key=lambda x: x[0], reverse=True)
@@ -173,7 +176,8 @@ async def semantic_search(request: SemanticSearchRequest):
                             c.chunk_type,
                             c.title,
                             e.embedding_vector,
-                            e.embedding_model
+                            e.embedding_model,
+                            c.entry_id,
                         FROM vector_top_k('idx_embeddings_vector', ?, ?) vt
                         JOIN embeddings e ON e.rowid = vt.id
                         JOIN chunks c ON c.rowid = e.chunk_id
@@ -189,7 +193,8 @@ async def semantic_search(request: SemanticSearchRequest):
                             c.chunk_type,
                             c.title,
                             e.embedding_vector,
-                            e.embedding_model
+                            e.embedding_model,
+                            c.entry_id
                         FROM vector_top_k('idx_embeddings_vector', ?, ?) vt
                         JOIN embeddings e ON e.rowid = vt.id
                         JOIN chunks c ON c.rowid = e.chunk_id
@@ -213,7 +218,8 @@ async def semantic_search(request: SemanticSearchRequest):
                         c.chunk_type,
                         c.title,
                         e.embedding_vector,
-                        e.embedding_model
+                        e.embedding_model,
+                        c.entry_id,
                     FROM vector_top_k('idx_embeddings_vector', ?, ?) vt
                     JOIN embeddings e ON e.rowid = vt.id
                     JOIN chunks c ON c.rowid = e.chunk_id
@@ -242,6 +248,7 @@ async def semantic_search(request: SemanticSearchRequest):
                 chunk_type = row[2]
                 title = row[3]
                 embedding_bytes = row[4]
+                entry_id = row[5]
 
                 # Calculate cosine similarity
                 stored_embedding = np.frombuffer(embedding_bytes,
@@ -255,7 +262,8 @@ async def semantic_search(request: SemanticSearchRequest):
                                  chunk_text=chunk_text,
                                  similarity_score=similarity,
                                  title=title,
-                                 chunk_type=chunk_type))
+                                 chunk_type=chunk_type,
+                                 entry_id=entry_id))
 
         # Apply cross-encoder reranking if requested
         reranked = False

@@ -51,6 +51,7 @@ class SearchResult(BaseModel):
     similarity_score: float
     title: str
     chunk_type: str
+    entry_id: str
     reranked: bool = False
 
 class SemanticSearchResponse(BaseModel):
