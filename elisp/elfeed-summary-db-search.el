@@ -72,12 +72,12 @@ Only used when `elfeed-summary-db-search-use-reranking' is non-nil."
   :type 'integer
   :group 'elfeed-summary-db)
 
-(defcustom elfeed-summary-db-headline-sort-order "last_updated"
-  "Default sort order for headline search results.
+(defcustom elfeed-summary-db-entry-sort-order "last_updated"
+  "Default sort order for entry search results.
 - \"filename\": Sort alphabetically by filename
 - \"last_updated\": Sort by most recently updated files first (default)
 - \"indexed_at\": Sort by most recently indexed files first"
-  :type '(choice (const :tag "By filename (alphabetical)" "filename")
+  :type '(choice (const :tag "By title (alphabetical)" "title")
                  (const :tag "By last updated (most recent first)" "last_updated")
                  (const :tag "By last indexed (most recent first)" "indexed_at"))
   :group 'elfeed-summary-db)
@@ -100,8 +100,7 @@ Retrieve up to LIMIT results (default `elfeed-summary-db-search-default-limit').
                                  (rerank . ,(if elfeed-summary-db-search-use-reranking t :json-false))
                                  (rerank_candidates . ,elfeed-summary-db-search-rerank-candidates))
                                (when scope-params
-                                 (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
-                                       (cons 'keyword (plist-get scope-params :keyword)))))))
+                                 (list (cons 'title_pattern (plist-get scope-params :title_pattern)))))))
     (plz 'post (concat (elfeed-summary-db-server-url) "/api/search/semantic")
       :headers '(("Content-Type" . "application/json"))
       :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
@@ -272,7 +271,7 @@ Called by ivy as the user types. Returns a list of candidates."
                                    (rerank . ,(if elfeed-summary-db-search-use-reranking t :json-false))
                                    (rerank_candidates . ,elfeed-summary-db-search-rerank-candidates))
                                  (when scope-params
-                                   (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
+                                   (list (cons 'title_pattern (plist-get scope-params :title_pattern))
                                          (cons 'keyword (plist-get scope-params :keyword))))))
            ;; Synchronous request (required for dynamic collection)
            (response
@@ -313,7 +312,7 @@ Each candidate is a string with metadata stored as text properties."
     (dotimes (i (length results))
       (let* ((result (elt results i))
              (chunk-text (alist-get 'chunk_text result))
-             (filename (alist-get 'filename result))
+             (title (alist-get 'title result))
              (similarity (alist-get 'similarity_score result))
              (begin-line (alist-get 'begin_line result))
              (end-line (alist-get 'end_line result))
@@ -384,10 +383,10 @@ Queries shorter than this will show a prompt message."
 
 
 ;;;###autoload
-(defun elfeed-summary-db-headline-search-all (&optional sort-by)
-  "Browse ALL headlines and jump to selection.
-Loads all headlines from database upfront. For large databases (100K+
-headlines), this can be slow. Consider using `elfeed-summary-db-headline-search'
+(defun elfeed-summary-db-entry-search-all (&optional sort-by)
+  "Browse ALL entrys and jump to selection.
+Loads all entrys from database upfront. For large databases (100K+
+entrys), this can be slow. Consider using `elfeed-summary-db-entry-search'
 instead, which filters dynamically as you type.
 
 You can filter candidates using completing-read after loading.
@@ -400,11 +399,11 @@ With prefix arg, prompt for sort order interactively."
    (list (when current-prefix-arg
            (completing-read "Sort by: "
                             '("filename" "last_updated" "indexed_at")
-                            nil t nil nil elfeed-summary-db-headline-sort-order))))
+                            nil t nil nil elfeed-summary-db-entry-sort-order))))
 
   (elfeed-summary-db-ensure-server)
 
-  (let* ((sort-order (or sort-by elfeed-summary-db-headline-sort-order))
+  (let* ((sort-order (or sort-by elfeed-summary-db-entry-sort-order))
          (scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
                          (elfeed-summary-db--scope-to-params)))
          (request-body (append `((query . "")
@@ -412,7 +411,7 @@ With prefix arg, prompt for sort order interactively."
                                (when scope-params
                                  (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
                                        (cons 'keyword (plist-get scope-params :keyword)))))))
-    (plz 'post (concat (elfeed-summary-db-server-url) "/api/search/headlines")
+    (plz 'post (concat (elfeed-summary-db-server-url) "/api/search/entrys")
       :headers '(("Content-Type" . "application/json"))
       :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
       :as (lambda () (json-parse-buffer :object-type 'alist :array-type 'list))
@@ -420,22 +419,22 @@ With prefix arg, prompt for sort order interactively."
               ;; Reset scope after search
               (when (boundp 'elfeed-summary-db-search-scope)
                 (setq elfeed-summary-db-search-scope '(all . nil)))
-              (elfeed-summary-db-display-headline-results response))
+              (elfeed-summary-db-display-entry-results response))
       :else (lambda (error)
               ;; Reset scope even on error
               (when (boundp 'elfeed-summary-db-search-scope)
                 (setq elfeed-summary-db-search-scope '(all . nil)))
               (message "Search error: %s" (plz-error-message error))))))
 
-(defun elfeed-summary-db-display-headline-results (response)
-  "Display headline search RESPONSE using completing-read."
+(defun elfeed-summary-db-display-entry-results (response)
+  "Display entry search RESPONSE using completing-read."
   (let ((results (alist-get 'results response)))
 
     (if (zerop (length results))
-        (message "No headlines found in database")
+        (message "No entrys found in database")
 
       ;; Results are pre-formatted by server: (display_string filename begin)
-      ;; Server handles string formatting for performance with 100K+ headlines
+      ;; Server handles string formatting for performance with 100K+ entrys
       ;; JSON parser returns lists directly - pass to completing-read as-is
       (let ((selection (completing-read
                         (format "Headlines (%d found): " (length results))
@@ -463,84 +462,84 @@ Returns 1 if file doesn't exist."
     ;; File doesn't exist (e.g., test files), return reasonable default
     1))
 
-;; Dynamic headline search (primary method)
+;; Dynamic entry search (primary method)
 ;;
-;; `elfeed-summary-db-headline-search' queries the database as you type, providing
-;; instant filtering without loading all headlines upfront. This is much faster
-;; for large databases (100K+ headlines).
+;; `elfeed-summary-db-entry-search' queries the database as you type, providing
+;; instant filtering without loading all entrys upfront. This is much faster
+;; for large databases (100K+ entrys).
 ;;
 ;; Key features:
 ;; - Queries API dynamically as you type (filters server-side)
 ;; - Fast filtering using SQL LIKE queries
 ;; - Customizable sort order (filename, last_updated, indexed_at)
 ;; - Only fetches matching results (default limit: 100 per query)
-;; - Results show formatted headline and filename
+;; - Results show formatted entry and filename
 ;;
-;; Usage: M-x elfeed-summary-db-headline-search RET
+;; Usage: M-x elfeed-summary-db-entry-search RET
 ;; Then start typing to filter - results update as you type
 ;; With prefix arg (C-u): Choose sort order interactively
 ;;
-;; For browsing ALL headlines: M-x elfeed-summary-db-headline-search-all
+;; For browsing ALL entrys: M-x elfeed-summary-db-entry-search-all
 ;; (loads everything upfront, slower for large databases)
 
-(defcustom elfeed-summary-db-ivy-headline-limit 100
-  "Number of headlines to fetch per query for ivy-based headline search.
+(defcustom elfeed-summary-db-ivy-entry-limit 100
+  "Number of entrys to fetch per query for ivy-based entry search.
 Used when querying the API dynamically as you type."
   :type 'integer
   :group 'elfeed-summary-db)
 
-(defcustom elfeed-summary-db-ivy-headline-min-query-length 2
-  "Minimum query length before searching headlines.
-Queries shorter than this will show all headlines (up to limit)."
+(defcustom elfeed-summary-db-ivy-entry-min-query-length 2
+  "Minimum query length before searching entrys.
+Queries shorter than this will show all entrys (up to limit)."
   :type 'integer
   :group 'elfeed-summary-db)
 
-(defvar elfeed-summary-db--current-headline-sort "last_updated"
-  "Current sort order for headline search, can be set via prefix arg.")
+(defvar elfeed-summary-db--current-entry-sort "last_updated"
+  "Current sort order for entry search, can be set via prefix arg.")
 
-(defvar elfeed-summary-db--last-headline-results nil
-  "Cache of last headline search results for ivy actions.")
+(defvar elfeed-summary-db--last-entry-results nil
+  "Cache of last entry search results for ivy actions.")
 
 ;;;###autoload
-(defun elfeed-summary-db-headline-search (&optional sort-by)
-  "Browse headlines with dynamic filtering - queries API as you type.
-Much faster than `elfeed-summary-db-headline-search-all' for large databases.
+(defun elfeed-summary-db-entry-search (&optional sort-by)
+  "Browse entrys with dynamic filtering - queries API as you type.
+Much faster than `elfeed-summary-db-entry-search-all' for large databases.
 
-Start typing to filter headlines - results update dynamically.
+Start typing to filter entrys - results update dynamically.
 SORT-BY specifies sort order (filename, last_updated, or indexed_at).
 With prefix arg (C-u), prompts for sort order interactively.
 
-Requires ivy. Falls back to `elfeed-summary-db-headline-search-all' if ivy not available."
+Requires ivy. Falls back to `elfeed-summary-db-entry-search-all' if ivy not available."
   (interactive
    (list (when current-prefix-arg
            (completing-read "Sort by: "
                             '("filename" "last_updated" "indexed_at")
-                            nil t nil nil elfeed-summary-db-headline-sort-order))))
+                            nil t nil nil elfeed-summary-db-entry-sort-order))))
 
   (elfeed-summary-db-ensure-server)
 
   ;; Set current sort order for use in dynamic collection
-  (setq elfeed-summary-db--current-headline-sort (or sort-by elfeed-summary-db-headline-sort-order))
+  (setq elfeed-summary-db--current-entry-sort (or sort-by elfeed-summary-db-entry-sort-order))
 
   (if (fboundp 'ivy-read)
       (ivy-read "Headlines (dynamic filter): "
-                #'elfeed-summary-db--dynamic-headline-collection
+                #'elfeed-summary-db--dynamic-entry-collection
                 :dynamic-collection t
-                :caller 'elfeed-summary-db-headline-search
-                :action #'elfeed-summary-db--open-headline-candidate)
-    ;; Fallback to loading all headlines if ivy not available
-    (message "Ivy not available, falling back to loading all headlines...")
-    (elfeed-summary-db-headline-search-all sort-by)))
+                :caller 'elfeed-summary-db-entry-search
+                :action #'elfeed-summary-db--open-entry-candidate)
+    ;; Fallback to loading all entrys if ivy not available
+    (message "Ivy not available, falling back to loading all entrys...")
+    (elfeed-summary-db-entry-search-all sort-by)))
 
-(defun elfeed-summary-db--dynamic-headline-collection (input)
-  "Fetch headlines matching INPUT dynamically.
+(defun elfeed-summary-db--dynamic-entry-collection (input)
+  "Fetch entrys matching INPUT dynamically.
 Called by ivy as the user types. Returns a list of candidates."
   ;; Even for empty input, fetch some results (up to limit)
   (let* ((scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
                          (elfeed-summary-db--scope-to-params)))
          (request-body (append `((query . ,input)
-                                 (limit . ,elfeed-summary-db-ivy-headline-limit)
-                                 (sort_by . ,elfeed-summary-db--current-headline-sort))
+                                 (limit . ,elfeed-summary-db-ivy-entry-limit)
+                                 (sort_by . ,elfeed-summary-db--current-entry-sort))
                                (when scope-params
                                  (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
                                        (cons 'keyword (plist-get scope-params :keyword))))))
@@ -553,7 +552,7 @@ Called by ivy as the user types. Returns a list of candidates."
                                        (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
                                        'utf-8)))
                 (let ((buffer (url-retrieve-synchronously
-                               (concat (elfeed-summary-db-server-url) "/api/search/headlines")
+                               (concat (elfeed-summary-db-server-url) "/api/search/entrys")
                                t nil 5)))  ; 5 second timeout
                   (if (not buffer)
                       nil
@@ -570,19 +569,19 @@ Called by ivy as the user types. Returns a list of candidates."
     (if (and response (alist-get 'results response))
         (let ((results (alist-get 'results response)))
           (if (zerop (length results))
-              (list (format "No headlines found for: %s" input))
+              (list (format "No entrys found for: %s" input))
             ;; Store full results for later lookup by action function
             ;; Results format from server: (display_string filename begin)
-            (setq elfeed-summary-db--last-headline-results results)
+            (setq elfeed-summary-db--last-entry-results results)
             ;; Return only display strings for ivy
             (mapcar #'car results)))
       ;; Error or no results
       (list (format "Search failed or no results for: %s" input)))))
 
-(defun elfeed-summary-db--open-headline-candidate (candidate)
-  "Open file for selected headline CANDIDATE.
+(defun elfeed-summary-db--open-entry-candidate (candidate)
+  "Open file for selected entry CANDIDATE.
 CANDIDATE is a display string. Look it up in cached results."
-  (let ((data (assoc candidate elfeed-summary-db--last-headline-results)))
+  (let ((data (assoc candidate elfeed-summary-db--last-entry-results)))
     (if data
         (let ((file (cadr data))
               (begin (caddr data)))
@@ -593,11 +592,11 @@ CANDIDATE is a display string. Look it up in cached results."
                 (org-show-entry)
                 (recenter))
             (message "File does not exist: %s" file)))
-      (message "Could not find headline data for: %s" candidate))))
+      (message "Could not find entry data for: %s" candidate))))
 
-;; Configure ivy for headline search if available
+;; Configure ivy for entry search if available
 (with-eval-after-load 'ivy
-  (ivy-configure 'elfeed-summary-db-headline-search
+  (ivy-configure 'elfeed-summary-db-entry-search
                  :height 15
                  :sort-fn nil))  ; Keep sort order from API
 
@@ -741,12 +740,12 @@ CANDIDATE is a display string. Look it up in cached results."
 
 ;;;###autoload
 (defun elfeed-summary-db-property-search (query)
-  "Search headlines by property name and optional value.
+  "Search entrys by property name and optional value.
 QUERY should be in format \"PROPERTY=PATTERN\" or just \"PROPERTY\".
 Examples:
   CATEGORY=org-db     Search for CATEGORY property with value matching 'org-db'
   TODO=DONE          Search for TODO property with value matching 'DONE'
-  CATEGORY           Search for any headline with CATEGORY property"
+  CATEGORY           Search for any entry with CATEGORY property"
   (interactive "sProperty search (PROPERTY or PROPERTY=PATTERN): ")
 
   (elfeed-summary-db-ensure-server)
@@ -792,7 +791,7 @@ Examples:
 
         (dotimes (i (length results))
           (let* ((result (elt results i))
-                 (headline-title (alist-get 'headline_title result))
+                 (entry-title (alist-get 'entry_title result))
                  (filename (alist-get 'filename result))
                  (begin (alist-get 'begin result))
                  (property (alist-get 'property result))
@@ -800,9 +799,9 @@ Examples:
                  ;; Fixed widths for alignment
                  (title-width 40)
                  (value-width 20)
-                 (display-title (if (> (length headline-title) title-width)
-                                    (concat (substring headline-title 0 (- title-width 3)) "...")
-                                  headline-title))
+                 (display-title (if (> (length entry-title) title-width)
+                                    (concat (substring entry-title 0 (- title-width 3)) "...")
+                                  entry-title))
                  (padded-title (format (format "%%-%ds" title-width) display-title))
                  (display-value (if (> (length value) value-width)
                                     (concat (substring value 0 (- value-width 3)) "...")
@@ -810,7 +809,7 @@ Examples:
                  (padded-value (format (format "%%-%ds" value-width) display-value))
                  ;; Calculate line number from character position
                  (line-number (elfeed-summary-db--char-to-line filename begin))
-                 ;; Format: property=value | headline | filename:line
+                 ;; Format: property=value | entry | filename:line
                  (candidate (format "%s=%-20s | %s | %s:%d"
                                     property
                                     padded-value
