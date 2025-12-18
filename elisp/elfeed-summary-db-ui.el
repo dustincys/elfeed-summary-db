@@ -1,24 +1,23 @@
-;;; org-db-v3-ui.el --- Transient menu interface -*- lexical-binding: t; -*-
+;;; elfeed-summary-db-ui.el --- Transient menu interface -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2025
 
-;; Author: org-db-v3
+;; Author: elfeed-summary-db
 ;; Keywords: org-mode, database, search
 
 ;;; Commentary:
 
-;; Transient menu interface for org-db v3 commands.
+;; Transient menu interface for elfeed-summary db commands.
 ;; Provides an easy-to-use menu system for all search and management functions.
 
 ;;; Code:
 
 (require 'transient)
-(require 'org-db-v3-search)
-(require 'org-db-v3-server)
-(require 'org-db-v3-client)
-(require 'org-db-v3-agenda)
+(require 'elfeed-summary-db-search)
+(require 'elfeed-summary-db-server)
+(require 'elfeed-summary-db-client)
 
-(defvar org-db-v3-search-scope '(all . nil)
+(defvar elfeed-summary-db-search-scope '(all . nil)
   "Current search scope. Format: (type . value)
    - (all . nil) - search all files
    - (directory . \"/path/to/dir/\") - files under directory
@@ -26,46 +25,46 @@
    - (tag . \"tag-name\") - files with specific keyword/tag
    Resets to (all . nil) after each search.")
 
-(defun org-db-v3--scope-description ()
+(defun elfeed-summary-db--scope-description ()
   "Return current scope description for transient header."
-  (pcase (car org-db-v3-search-scope)
+  (pcase (car elfeed-summary-db-search-scope)
     ('all "All files")
     ('directory (format "Directory: %s"
                         (file-name-nondirectory
-                         (directory-file-name (cdr org-db-v3-search-scope)))))
+                         (directory-file-name (cdr elfeed-summary-db-search-scope)))))
     ('project (format "Project: %s"
                       (file-name-nondirectory
-                       (directory-file-name (cdr org-db-v3-search-scope)))))
-    ('tag (format "Tag: %s" (cdr org-db-v3-search-scope)))
+                       (directory-file-name (cdr elfeed-summary-db-search-scope)))))
+    ('tag (format "Tag: %s" (cdr elfeed-summary-db-search-scope)))
     (_ "All files")))
 
-(defun org-db-v3--scope-to-params ()
+(defun elfeed-summary-db--scope-to-params ()
   "Convert current scope to API filter parameters.
 Returns plist with :filename_pattern and/or :keyword."
-  (pcase (car org-db-v3-search-scope)
+  (pcase (car elfeed-summary-db-search-scope)
     ('all nil)
     ('directory
-     (list :filename_pattern (concat (cdr org-db-v3-search-scope) "%")))
+     (list :filename_pattern (concat (cdr elfeed-summary-db-search-scope) "%")))
     ('project
-     (list :filename_pattern (concat (cdr org-db-v3-search-scope) "%")))
+     (list :filename_pattern (concat (cdr elfeed-summary-db-search-scope) "%")))
     ('tag
-     (list :keyword (cdr org-db-v3-search-scope)))
+     (list :keyword (cdr elfeed-summary-db-search-scope)))
     (_ nil)))
 
 ;; Transient infix for all files scope
-(transient-define-infix org-db-v3--scope-all-infix ()
+(transient-define-infix elfeed-summary-db--scope-all-infix ()
   "Set search scope to all files."
   :class 'transient-lisp-variable
-  :variable 'org-db-v3-search-scope
+  :variable 'elfeed-summary-db-search-scope
   :key "-a"
   :description "All files"
   :reader (lambda (&rest _) '(all . nil)))
 
 ;; Transient infix for directory scope
-(transient-define-infix org-db-v3--scope-directory-infix ()
+(transient-define-infix elfeed-summary-db--scope-directory-infix ()
   "Set search scope to a directory."
   :class 'transient-lisp-variable
-  :variable 'org-db-v3-search-scope
+  :variable 'elfeed-summary-db-search-scope
   :key "-d"
   :description "Directory"
   :reader (lambda (prompt _initial-input _history)
@@ -74,10 +73,10 @@ Returns plist with :filename_pattern and/or :keyword."
                 (cons 'directory (expand-file-name dir))))))
 
 ;; Transient infix for project scope
-(transient-define-infix org-db-v3--scope-project-infix ()
+(transient-define-infix elfeed-summary-db--scope-project-infix ()
   "Set search scope to a Projectile project."
   :class 'transient-lisp-variable
-  :variable 'org-db-v3-search-scope
+  :variable 'elfeed-summary-db-search-scope
   :key "-p"
   :description "Project"
   :reader (lambda (prompt _initial-input _history)
@@ -101,10 +100,10 @@ Returns plist with :filename_pattern and/or :keyword."
                 (ding)))))
 
 ;; Transient infix for tag scope
-(transient-define-infix org-db-v3--scope-tag-infix ()
+(transient-define-infix elfeed-summary-db--scope-tag-infix ()
   "Set search scope to files with a specific keyword/tag."
   :class 'transient-lisp-variable
-  :variable 'org-db-v3-search-scope
+  :variable 'elfeed-summary-db-search-scope
   :key "-t"
   :description "Tag/keyword"
   :reader (lambda (prompt _initial-input _history)
@@ -112,104 +111,97 @@ Returns plist with :filename_pattern and/or :keyword."
               (when (and tag (not (string-empty-p tag)))
                 (cons 'tag tag)))))
 
-;;;###autoload (autoload 'org-db-menu "org-db-v3-ui" nil t)
+;;;###autoload (autoload 'org-db-menu "elfeed-summary-db-ui" nil t)
 (transient-define-prefix org-db-menu ()
-  [:description (lambda () (format "org-db v3 [Scope: %s]" (org-db-v3--scope-description)))
-   "Search and manage your org files."]
+  [:description (lambda () (format "elfeed-summary db [Scope: %s]" (elfeed-summary-db--scope-description)))
+                "Search and manage your org files."]
   [["Scope"
-    ("-a" org-db-v3--scope-all-infix)
-    ("-d" org-db-v3--scope-directory-infix)
-    ("-p" org-db-v3--scope-project-infix)
-    ("-t" org-db-v3--scope-tag-infix)]
+    ("-a" elfeed-summary-db--scope-all-infix)
+    ("-d" elfeed-summary-db--scope-directory-infix)
+    ("-p" elfeed-summary-db--scope-project-infix)
+    ("-t" elfeed-summary-db--scope-tag-infix)]
    ["Actions"
     ("q" "Quit" transient-quit-one)]]
   ["Search"
    ["Text Search"
-    ("v" "Semantic search" org-db-v3--semantic-search-dispatch
+    ("v" "Semantic search" elfeed-summary-db--semantic-search-dispatch
      :description (lambda () (if (fboundp 'ivy-read)
-                                "Vector embeddings (dynamic)"
-                              "Vector embeddings")))
-    ("k" "Full-text search" org-db-v3--fulltext-search-dispatch
+                                 "Vector embeddings (dynamic)"
+                               "Vector embeddings")))
+    ("k" "Full-text search" elfeed-summary-db--fulltext-search-dispatch
      :description (lambda () (if (fboundp 'ivy-read)
-                                "FTS5 keywords (dynamic)"
-                              "FTS5 keywords")))
-    ("h" "Headline search" org-db-v3-headline-search
+                                 "FTS5 keywords (dynamic)"
+                               "FTS5 keywords")))
+    ("h" "Headline search" elfeed-summary-db-headline-search
      :description "Browse headlines")
-    ("P" "Property search" org-db-v3-property-search
+    ("P" "Property search" elfeed-summary-db-property-search
      :description "PROPERTY=VALUE")
-    ("p" "Search at point" org-db-v3-search-at-point
+    ("p" "Search at point" elfeed-summary-db-search-at-point
      :description "Text at point/region")]
    ["Image Search"
-    ("i" "Search images" org-db-v3--image-search-dispatch
+    ("i" "Search images" elfeed-summary-db--image-search-dispatch
      :description (lambda () (if (fboundp 'ivy-read)
-                                "CLIP embeddings (dynamic)"
-                              "CLIP embeddings")))]
+                                 "CLIP embeddings (dynamic)"
+                               "CLIP embeddings")))]
    ["Files"
-    ("f" "Open file from db" org-db-v3-open-file
+    ("f" "Open file from db" elfeed-summary-db-open-file
      :description "Browse org files")
-    ("F" "Open linked file" org-db-v3-open-linked-file
+    ("F" "Open linked file" elfeed-summary-db-open-linked-file
      :description "Browse linked files")]]
   ["Agenda"
-   ("a" "Show agenda" org-db-v3-agenda
+   ("a" "Show agenda" elfeed-summary-db-agenda
     :description "TODOs & deadlines")]
   ["Management"
    ["Indexing"
-    ("u" "Update current file" org-db-v3-update-current-file
+    ("u" "Update current file" elfeed-summary-db-update-current-file
      :description "Index current file")
-    ("U" "Update all open files" org-db-v3-update-all-buffers
+    ("U" "Update all open files" elfeed-summary-db-update-all-buffers
      :description "Index all open buffers")
-    ("d" "Index directory" org-db-v3-index-directory
+    ("d" "Index directory" elfeed-summary-db-index-directory
      :description "Index directory recursively")
-    ("r" "Reindex database" org-db-v3-reindex-database
+    ("r" "Reindex database" elfeed-summary-db-reindex-database
      :description "Reindex all files")]
    ["Server"
-    ("S" "Server status" org-db-v3-server-status
+    ("S" "Server status" elfeed-summary-db-server-status
      :description "Check server status")
-    ("R" "Restart server" org-db-v3-restart-server
+    ("R" "Restart server" elfeed-summary-db-restart-server
      :description "Restart server")
-    ("L" "View server logs" org-db-v3-view-logs
+    ("L" "View server logs" elfeed-summary-db-view-logs
      :description "View logs")
-    ("W" "Open web interface" org-db-v3-open-web-interface
+    ("W" "Open web interface" elfeed-summary-db-open-web-interface
      :description "Open web UI")
-    ("X" "Clear database" org-db-v3-clear-database
+    ("X" "Clear database" elfeed-summary-db-clear-database
      :description "Clear database (destructive!)")]])
 
 ;;;###autoload
-(defun org-db-v3--semantic-search-dispatch ()
+(defun elfeed-summary-db--semantic-search-dispatch ()
   "Dispatch to ivy or standard semantic search based on availability."
   (interactive)
   (if (fboundp 'ivy-read)
-      (call-interactively 'org-db-v3-semantic-search-ivy)
-    (call-interactively 'org-db-v3-semantic-search)))
+      (call-interactively 'elfeed-summary-db-semantic-search-ivy)
+    (call-interactively 'elfeed-summary-db-semantic-search)))
 
 ;;;###autoload
-(defun org-db-v3--fulltext-search-dispatch ()
+(defun elfeed-summary-db--fulltext-search-dispatch ()
   "Dispatch to ivy or standard fulltext search based on availability."
   (interactive)
   (if (fboundp 'ivy-read)
-      (call-interactively 'org-db-v3-fulltext-search-ivy)
-    (call-interactively 'org-db-v3-fulltext-search)))
+      (call-interactively 'elfeed-summary-db-fulltext-search-ivy)
+    (call-interactively 'elfeed-summary-db-fulltext-search)))
+
 
 ;;;###autoload
-(defun org-db-v3--image-search-dispatch ()
-  "Dispatch to ivy or standard image search based on availability."
-  (interactive)
-  (if (fboundp 'ivy-read)
-      (call-interactively 'org-db-v3-image-search-ivy)
-    (call-interactively 'org-db-v3-image-search)))
-
-;;;###autoload
-(defun org-db-v3-update-current-file ()
+(defun elfeed-summary-db-update-current-file ()
   "Manually update the current file."
   (interactive)
   (if (buffer-file-name)
       (progn
-        (org-db-v3-index-file-async (buffer-file-name))
+        (elfeed-summary-db-index-file-async (buffer-file-name))
         (message "Indexing %s..." (buffer-file-name)))
     (message "No file associated with current buffer")))
 
 ;;;###autoload
-(defun org-db-v3-update-all-buffers ()
+(defun elfeed-summary-db-update-all-buffers ()
   "Update all open org buffers."
   (interactive)
   (let ((count 0))
@@ -218,33 +210,33 @@ Returns plist with :filename_pattern and/or :keyword."
         (when (and (buffer-file-name)
                    (or (string-suffix-p ".org" (buffer-file-name))
                        (string-suffix-p ".org_archive" (buffer-file-name))))
-          (org-db-v3-index-file-async (buffer-file-name))
+          (elfeed-summary-db-index-file-async (buffer-file-name))
           (setq count (1+ count)))))
     (message "Sent %d org file%s to server for indexing"
              count
              (if (= count 1) "" "s"))))
 
 ;;;###autoload
-(defun org-db-v3-server-status ()
+(defun elfeed-summary-db-server-status ()
   "Show server status."
   (interactive)
-  (org-db-v3-ensure-server)
-  (if (org-db-v3-server-running-p)
-      (message "org-db server is running on %s" (org-db-v3-server-url))
+  (elfeed-summary-db-ensure-server)
+  (if (elfeed-summary-db-server-running-p)
+      (message "org-db server is running on %s" (elfeed-summary-db-server-url))
     (message "org-db server is not running")))
 
 ;;;###autoload
-(defun org-db-v3-restart-server ()
+(defun elfeed-summary-db-restart-server ()
   "Restart the org-db server."
   (interactive)
   (when (yes-or-no-p "Restart org-db server? ")
-    (org-db-v3-stop-server)
+    (elfeed-summary-db-stop-server)
     (sleep-for 1)
-    (org-db-v3-start-server)
+    (elfeed-summary-db-start-server)
     (message "Server restarted")))
 
 ;;;###autoload
-(defun org-db-v3-view-logs ()
+(defun elfeed-summary-db-view-logs ()
   "View the server log file."
   (interactive)
   (let ((log-file "/tmp/org-db-server.log"))
@@ -257,19 +249,19 @@ Returns plist with :filename_pattern and/or :keyword."
       (message "Server log file not found: %s" log-file))))
 
 ;;;###autoload
-(defun org-db-v3-open-web-interface ()
+(defun elfeed-summary-db-open-web-interface ()
   "Open the org-db server web interface in a browser."
   (interactive)
-  (org-db-v3-ensure-server)
-  (if (org-db-v3-server-running-p)
+  (elfeed-summary-db-ensure-server)
+  (if (elfeed-summary-db-server-running-p)
       (progn
-        (browse-url (org-db-v3-server-url))
-        (message "Opening org-db web interface at %s" (org-db-v3-server-url)))
+        (browse-url (elfeed-summary-db-server-url))
+        (message "Opening org-db web interface at %s" (elfeed-summary-db-server-url)))
     (message "org-db server is not running")))
 
 ;; Make org-db-menu available as M-x org-db
 ;;;###autoload
 (defalias 'org-db 'org-db-menu)
 
-(provide 'org-db-v3-ui)
-;;; org-db-v3-ui.el ends here
+(provide 'elfeed-summary-db-ui)
+;;; elfeed-summary-db-ui.el ends here
