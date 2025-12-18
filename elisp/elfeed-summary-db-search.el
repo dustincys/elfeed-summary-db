@@ -131,13 +131,10 @@ Retrieve up to LIMIT results (default `elfeed-summary-db-search-default-limit').
 
         (dotimes (i (length results))
           (let* ((result (elt results i))
+                 (entry_id (alist-get 'entry_id result))
                  (chunk-text (alist-get 'chunk_text result))
-                 (filename (alist-get 'filename result))
+                 (title (alist-get 'title result))
                  (similarity (alist-get 'similarity_score result))
-                 (begin-line (alist-get 'begin_line result))
-                 (end-line (alist-get 'end_line result))
-                 (linked-file-path (alist-get 'linked_file_path result))
-                 (linked-file-type (alist-get 'linked_file_type result))
                  ;; Truncate and clean chunk text for display
                  (context-width 60)
                  (display-text (replace-regexp-in-string
@@ -149,20 +146,15 @@ Retrieve up to LIMIT results (default `elfeed-summary-db-search-default-limit').
                  (padded-context (format (format "%%-%ds" context-width) display-text))
                  ;; Note: File type prefix is now added by the Python API in chunk-text
                  ;; Format with fixed-width columns: score | context | filename:line
-                 (candidate (format "%-6.3f | %s | %s:%d"
+                 (candidate (format "%-6.3f | %s | %s"
                                     similarity
                                     padded-context
-                                    filename
-                                    begin-line)))
-
+                                    title)))
             ;; Store metadata
             (puthash candidate
-                     (list :file filename
-                           :line begin-line
-                           :end-line end-line
+                     (list :title title
                            :text chunk-text
-                           :linked-file-path linked-file-path
-                           :linked-file-type linked-file-type)
+                           :entry_id entry_id)
                      metadata-table)
             (push candidate candidates)))
 
@@ -179,13 +171,13 @@ Retrieve up to LIMIT results (default `elfeed-summary-db-search-default-limit').
                           nil t)))
           (when selection
             (let* ((metadata (gethash selection metadata-table))
-                   (file (plist-get metadata :file))
-                   (line (plist-get metadata :line)))
-              (when (and file (file-exists-p file))
-                (find-file file)
-                (goto-char (point-min))
-                (forward-line (1- line))
-                (recenter)))))))))
+                   (entry_id (plist-get metadata :entry_id))
+                   (entry (elfeed-db-get-entry entry_id)))
+              (when entry
+                (elfeed-show-entry entry)
+                (message "Opened: %s" (elfeed-entry-title entry)))
+              )))))))
+
 
 ;;;###autoload
 (defun elfeed-summary-db-search-at-point ()
@@ -208,9 +200,6 @@ Retrieve up to LIMIT results (default `elfeed-summary-db-search-default-limit').
 ;; - Queries API dynamically as you type (minimum 2 characters)
 ;; - Caches results to avoid redundant API calls
 ;; - Optional reranking for improved relevance
-;; - Multiple actions (use M-o in ivy to access):
-;;   - o: Open file at match location (default)
-;;   - c: Copy chunk text to kill ring
 ;; - Results show similarity score, context snippet, and file location
 ;;
 ;; Usage: M-x elfeed-summary-db-semantic-search-ivy RET
@@ -252,8 +241,8 @@ With prefix arg (C-u), prompts for custom limit."
                 :dynamic-collection t
                 :caller 'elfeed-summary-db-semantic-search-ivy
                 :action '(1
-                          ("o" elfeed-summary-db--open-semantic-candidate "Open file")
-                          ("c" elfeed-summary-db--copy-semantic-text "Copy text")))
+                          ("o" elfeed-summary-db--open-semantic-candidate "Open entry")
+                          ("c" elfeed-summary-db--copy-semantic-text "Copy summary")))
     (user-error "Ivy is required for dynamic semantic search. Use elfeed-summary-db-semantic-search instead")))
 
 (defun elfeed-summary-db--dynamic-semantic-collection (input)
@@ -271,8 +260,7 @@ Called by ivy as the user types. Returns a list of candidates."
                                    (rerank . ,(if elfeed-summary-db-search-use-reranking t :json-false))
                                    (rerank_candidates . ,elfeed-summary-db-search-rerank-candidates))
                                  (when scope-params
-                                   (list (cons 'title_pattern (plist-get scope-params :title_pattern))
-                                         (cons 'keyword (plist-get scope-params :keyword))))))
+                                   (list (cons 'title_pattern (plist-get scope-params :title_pattern))))))
            ;; Synchronous request (required for dynamic collection)
            (response
             (condition-case err
@@ -311,13 +299,10 @@ Each candidate is a string with metadata stored as text properties."
   (let ((candidates nil))
     (dotimes (i (length results))
       (let* ((result (elt results i))
+             (entry_id (alist-get 'entry_id result))
              (chunk-text (alist-get 'chunk_text result))
              (title (alist-get 'title result))
              (similarity (alist-get 'similarity_score result))
-             (begin-line (alist-get 'begin_line result))
-             (end-line (alist-get 'end_line result))
-             (linked-file-path (alist-get 'linked_file_path result))
-             (linked-file-type (alist-get 'linked_file_type result))
              ;; Truncate and clean chunk text for display
              (context-width 60)
              (display-text (replace-regexp-in-string
@@ -335,12 +320,10 @@ Each candidate is a string with metadata stored as text properties."
 
         ;; Store metadata as text properties
         (put-text-property 0 (length candidate) 'semantic-data
-                           `(:file ,filename
-                                   :line ,begin-line
-                                   :end-line ,end-line
-                                   :text ,chunk-text
-                                   :linked-file-path ,linked-file-path
-                                   :linked-file-type ,linked-file-type)
+                           `(
+                             :title ,title
+                             :text ,chunk-text
+                             :entry_id ,entry_id)
                            candidate)
         (push candidate candidates)))
     (nreverse candidates)))
@@ -349,22 +332,29 @@ Each candidate is a string with metadata stored as text properties."
   "Open file for selected semantic CANDIDATE.
 CANDIDATE is a string with metadata stored in text properties."
   (let* ((data (get-text-property 0 'semantic-data candidate))
-         (file (plist-get data :file))
-         (line (plist-get data :line)))
-    (when (and file (file-exists-p file))
-      (find-file file)
-      (goto-char (point-min))
-      (forward-line (1- line))
-      (recenter))))
+         (title (plist-get data :title))
+         (entry_id (plist-get data :entry_id))
+         (entry (elfeed-db-get-entry entry_id)))
+    (when entry
+      (elfeed-show-entry entry)
+      (message "Opened: %s" (elfeed-entry-title entry)))))
 
 (defun elfeed-summary-db--copy-semantic-text (candidate)
   "Copy the chunk text to kill ring for CANDIDATE.
 CANDIDATE is a string with metadata stored in text properties."
   (let* ((data (get-text-property 0 'semantic-data candidate))
-         (text (plist-get data :text)))
-    (when text
-      (kill-new text)
-      (message "Copied to kill ring: %s" (substring text 0 (min 50 (length text)))))))
+         (entry_id (plist-get data :entry_id))
+         (entry (elfeed-db-get-entry entry_id))
+         (title (elfeed-entry-title entry))
+         (link (elfeed-entry-link entry))
+         (fdate (elfeed-entry-date entry))
+         (pdate (format-time-string "%Y-%m-%d %H:%M:%S" (seconds-to-time fdate)))
+         (feed-title (elfeed-feed-title (elfeed-entry-feed entry)))
+         (summary (elfeed-meta entry :summary)))
+    (prog1
+        (kill-new  (format "TITLE:\n\t\t%s\nJOURNAL:\n\t\t%s\nDATE:\n\t\t%s\nURL:\n\t\t%s\n\n%s\n"
+                           title feed-title pdate link summary))
+      (message "Summary copied!"))))
 
 ;; Configure ivy for semantic search if available
 (with-eval-after-load 'ivy
@@ -372,476 +362,11 @@ CANDIDATE is a string with metadata stored in text properties."
                  :height 15
                  :sort-fn nil))  ; Keep relevance order from API
 
-
-
 (defcustom elfeed-summary-db-ivy-min-query-length 2
   "Minimum query length before searching for images.
 Queries shorter than this will show a prompt message."
   :type 'integer
   :group 'elfeed-summary-db)
-
-
-
-;;;###autoload
-(defun elfeed-summary-db-entry-search-all (&optional sort-by)
-  "Browse ALL entrys and jump to selection.
-Loads all entrys from database upfront. For large databases (100K+
-entrys), this can be slow. Consider using `elfeed-summary-db-entry-search'
-instead, which filters dynamically as you type.
-
-You can filter candidates using completing-read after loading.
-Optional SORT-BY specifies the sort order:
-  - \"filename\": Sort alphabetically by filename (default)
-  - \"last_updated\": Sort by most recently updated files first
-  - \"indexed_at\": Sort by most recently indexed files first
-With prefix arg, prompt for sort order interactively."
-  (interactive
-   (list (when current-prefix-arg
-           (completing-read "Sort by: "
-                            '("filename" "last_updated" "indexed_at")
-                            nil t nil nil elfeed-summary-db-entry-sort-order))))
-
-  (elfeed-summary-db-ensure-server)
-
-  (let* ((sort-order (or sort-by elfeed-summary-db-entry-sort-order))
-         (scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
-                         (elfeed-summary-db--scope-to-params)))
-         (request-body (append `((query . "")
-                                 (sort_by . ,sort-order))
-                               (when scope-params
-                                 (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
-                                       (cons 'keyword (plist-get scope-params :keyword)))))))
-    (plz 'post (concat (elfeed-summary-db-server-url) "/api/search/entrys")
-      :headers '(("Content-Type" . "application/json"))
-      :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
-      :as (lambda () (json-parse-buffer :object-type 'alist :array-type 'list))
-      :then (lambda (response)
-              ;; Reset scope after search
-              (when (boundp 'elfeed-summary-db-search-scope)
-                (setq elfeed-summary-db-search-scope '(all . nil)))
-              (elfeed-summary-db-display-entry-results response))
-      :else (lambda (error)
-              ;; Reset scope even on error
-              (when (boundp 'elfeed-summary-db-search-scope)
-                (setq elfeed-summary-db-search-scope '(all . nil)))
-              (message "Search error: %s" (plz-error-message error))))))
-
-(defun elfeed-summary-db-display-entry-results (response)
-  "Display entry search RESPONSE using completing-read."
-  (let ((results (alist-get 'results response)))
-
-    (if (zerop (length results))
-        (message "No entrys found in database")
-
-      ;; Results are pre-formatted by server: (display_string filename begin)
-      ;; Server handles string formatting for performance with 100K+ entrys
-      ;; JSON parser returns lists directly - pass to completing-read as-is
-      (let ((selection (completing-read
-                        (format "Headlines (%d found): " (length results))
-                        results
-                        nil t)))
-        (when selection
-          ;; Selection is the display string, use assoc to find full data
-          (let* ((data (assoc selection results))
-                 (file (cadr data))
-                 (begin (caddr data)))
-            (when (and file (file-exists-p file))
-              (find-file file)
-              (goto-char begin)
-              (org-show-entry)
-              (recenter))))))))
-
-(defun elfeed-summary-db--char-to-line (filename char-pos)
-  "Convert character position CHAR-POS in FILENAME to line number.
-Returns 1 if file doesn't exist."
-  (if (file-exists-p filename)
-      (with-temp-buffer
-        (insert-file-contents filename)
-        (goto-char (min char-pos (point-max)))
-        (line-number-at-pos))
-    ;; File doesn't exist (e.g., test files), return reasonable default
-    1))
-
-;; Dynamic entry search (primary method)
-;;
-;; `elfeed-summary-db-entry-search' queries the database as you type, providing
-;; instant filtering without loading all entrys upfront. This is much faster
-;; for large databases (100K+ entrys).
-;;
-;; Key features:
-;; - Queries API dynamically as you type (filters server-side)
-;; - Fast filtering using SQL LIKE queries
-;; - Customizable sort order (filename, last_updated, indexed_at)
-;; - Only fetches matching results (default limit: 100 per query)
-;; - Results show formatted entry and filename
-;;
-;; Usage: M-x elfeed-summary-db-entry-search RET
-;; Then start typing to filter - results update as you type
-;; With prefix arg (C-u): Choose sort order interactively
-;;
-;; For browsing ALL entrys: M-x elfeed-summary-db-entry-search-all
-;; (loads everything upfront, slower for large databases)
-
-(defcustom elfeed-summary-db-ivy-entry-limit 100
-  "Number of entrys to fetch per query for ivy-based entry search.
-Used when querying the API dynamically as you type."
-  :type 'integer
-  :group 'elfeed-summary-db)
-
-(defcustom elfeed-summary-db-ivy-entry-min-query-length 2
-  "Minimum query length before searching entrys.
-Queries shorter than this will show all entrys (up to limit)."
-  :type 'integer
-  :group 'elfeed-summary-db)
-
-(defvar elfeed-summary-db--current-entry-sort "last_updated"
-  "Current sort order for entry search, can be set via prefix arg.")
-
-(defvar elfeed-summary-db--last-entry-results nil
-  "Cache of last entry search results for ivy actions.")
-
-;;;###autoload
-(defun elfeed-summary-db-entry-search (&optional sort-by)
-  "Browse entrys with dynamic filtering - queries API as you type.
-Much faster than `elfeed-summary-db-entry-search-all' for large databases.
-
-Start typing to filter entrys - results update dynamically.
-SORT-BY specifies sort order (filename, last_updated, or indexed_at).
-With prefix arg (C-u), prompts for sort order interactively.
-
-Requires ivy. Falls back to `elfeed-summary-db-entry-search-all' if ivy not available."
-  (interactive
-   (list (when current-prefix-arg
-           (completing-read "Sort by: "
-                            '("filename" "last_updated" "indexed_at")
-                            nil t nil nil elfeed-summary-db-entry-sort-order))))
-
-  (elfeed-summary-db-ensure-server)
-
-  ;; Set current sort order for use in dynamic collection
-  (setq elfeed-summary-db--current-entry-sort (or sort-by elfeed-summary-db-entry-sort-order))
-
-  (if (fboundp 'ivy-read)
-      (ivy-read "Headlines (dynamic filter): "
-                #'elfeed-summary-db--dynamic-entry-collection
-                :dynamic-collection t
-                :caller 'elfeed-summary-db-entry-search
-                :action #'elfeed-summary-db--open-entry-candidate)
-    ;; Fallback to loading all entrys if ivy not available
-    (message "Ivy not available, falling back to loading all entrys...")
-    (elfeed-summary-db-entry-search-all sort-by)))
-
-(defun elfeed-summary-db--dynamic-entry-collection (input)
-  "Fetch entrys matching INPUT dynamically.
-Called by ivy as the user types. Returns a list of candidates."
-  ;; Even for empty input, fetch some results (up to limit)
-  (let* ((scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
-                         (elfeed-summary-db--scope-to-params)))
-         (request-body (append `((query . ,input)
-                                 (limit . ,elfeed-summary-db-ivy-entry-limit)
-                                 (sort_by . ,elfeed-summary-db--current-entry-sort))
-                               (when scope-params
-                                 (list (cons 'filename_pattern (plist-get scope-params :filename_pattern))
-                                       (cons 'keyword (plist-get scope-params :keyword))))))
-         ;; Synchronous request (required for dynamic collection)
-         (response
-          (condition-case err
-              (let ((url-request-method "POST")
-                    (url-request-extra-headers '(("Content-Type" . "application/json")))
-                    (url-request-data (encode-coding-string
-                                       (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
-                                       'utf-8)))
-                (let ((buffer (url-retrieve-synchronously
-                               (concat (elfeed-summary-db-server-url) "/api/search/entrys")
-                               t nil 5)))  ; 5 second timeout
-                  (if (not buffer)
-                      nil
-                    (unwind-protect
-                        (with-current-buffer buffer
-                          (goto-char (point-min))
-                          (when (re-search-forward "^$" nil t)
-                            (json-parse-buffer :object-type 'alist :array-type 'list)))
-                      (kill-buffer buffer)))))
-            (error
-             (message "Headline search error: %S" err)
-             nil))))
-
-    (if (and response (alist-get 'results response))
-        (let ((results (alist-get 'results response)))
-          (if (zerop (length results))
-              (list (format "No entrys found for: %s" input))
-            ;; Store full results for later lookup by action function
-            ;; Results format from server: (display_string filename begin)
-            (setq elfeed-summary-db--last-entry-results results)
-            ;; Return only display strings for ivy
-            (mapcar #'car results)))
-      ;; Error or no results
-      (list (format "Search failed or no results for: %s" input)))))
-
-(defun elfeed-summary-db--open-entry-candidate (candidate)
-  "Open file for selected entry CANDIDATE.
-CANDIDATE is a display string. Look it up in cached results."
-  (let ((data (assoc candidate elfeed-summary-db--last-entry-results)))
-    (if data
-        (let ((file (cadr data))
-              (begin (caddr data)))
-          (if (and file (file-exists-p file))
-              (progn
-                (find-file file)
-                (goto-char begin)
-                (org-show-entry)
-                (recenter))
-            (message "File does not exist: %s" file)))
-      (message "Could not find entry data for: %s" candidate))))
-
-;; Configure ivy for entry search if available
-(with-eval-after-load 'ivy
-  (ivy-configure 'elfeed-summary-db-entry-search
-                 :height 15
-                 :sort-fn nil))  ; Keep sort order from API
-
-;;;###autoload
-(defun elfeed-summary-db-open-file ()
-  "Browse all files in database and open selected file."
-  (interactive)
-
-  (elfeed-summary-db-ensure-server)
-
-  (plz 'get (concat (elfeed-summary-db-server-url) "/api/stats/files")
-    :as #'json-read
-    :then (lambda (response)
-            (elfeed-summary-db-display-file-list response))
-    :else (lambda (error)
-            (message "Error fetching files: %s" (plz-error-message error)))))
-
-;;;###autoload
-(defun elfeed-summary-db-open-linked-file ()
-  "Browse all linked files (PDF, DOCX, etc.) in database and open selected file or org link."
-  (interactive)
-
-  (elfeed-summary-db-ensure-server)
-
-  (plz 'get (concat (elfeed-summary-db-server-url) "/api/linked-files/all")
-    :as #'json-read
-    :then (lambda (response)
-            (elfeed-summary-db-display-linked-file-list response))
-    :else (lambda (error)
-            (message "Error fetching linked files: %s" (plz-error-message error)))))
-
-(defun elfeed-summary-db-display-file-list (response)
-  "Display file list from RESPONSE using completing-read."
-  (let* ((files (alist-get 'files response))
-         (count (alist-get 'count response)))
-
-    (if (zerop count)
-        (message "No files found in database")
-
-      ;; Build candidates with metadata
-      (let* ((candidates nil)
-             (metadata-table (make-hash-table :test 'equal)))
-
-        (dotimes (i (length files))
-          (let* ((file-info (elt files i))
-                 (filename (alist-get 'filename file-info))
-                 (indexed-at (alist-get 'indexed_at file-info))
-                 ;; Format timestamp for display (remove microseconds if present)
-                 (display-time (if indexed-at
-                                   (replace-regexp-in-string "\\..*" "" indexed-at)
-                                 "unknown"))
-                 ;; Format: timestamp | filename
-                 (candidate (format "%s | %s"
-                                    display-time
-                                    filename)))
-
-            ;; Store metadata
-            (puthash candidate filename metadata-table)
-            (push candidate candidates)))
-
-        ;; Keep chronological order (most recent first, already sorted from server)
-        (setq candidates (nreverse candidates))
-
-        ;; Let user select
-        (let ((selection (completing-read
-                          (format "Open file (%d files in database): " count)
-                          candidates
-                          nil t)))
-          (when selection
-            (let ((file (gethash selection metadata-table)))
-              (if (and file (file-exists-p file))
-                  (find-file file)
-                (message "File does not exist: %s" file)))))))))
-
-(defun elfeed-summary-db-display-linked-file-list (response)
-  "Display linked file list from RESPONSE using completing-read."
-  (let* ((linked-files (alist-get 'linked_files response))
-         (count (alist-get 'count response)))
-
-    (if (zerop count)
-        (message "No linked files found in database")
-
-      ;; Build candidates with metadata
-      (let* ((candidates nil)
-             (metadata-table (make-hash-table :test 'equal)))
-
-        (dotimes (i (length linked-files))
-          (let* ((file-info (elt linked-files i))
-                 (file-path (alist-get 'file_path file-info))
-                 (file-type (alist-get 'file_type file-info))
-                 (org-filename (alist-get 'org_filename file-info))
-                 (org-link-line (alist-get 'org_link_line file-info))
-                 (chunk-count (alist-get 'chunk_count file-info))
-                 (indexed-at (alist-get 'indexed_at file-info))
-                 ;; Format timestamp for display (remove microseconds if present)
-                 (display-time (if indexed-at
-                                   (replace-regexp-in-string "\\..*" "" indexed-at)
-                                 "unknown"))
-                 ;; Format: [TYPE] filename | org-file:line | chunks | timestamp
-                 (candidate (format "[%-4s] %-40s | %s:%d | %d chunks | %s"
-                                    (upcase (or file-type ""))
-                                    (file-name-nondirectory file-path)
-                                    (file-name-nondirectory org-filename)
-                                    org-link-line
-                                    chunk-count
-                                    display-time)))
-
-            ;; Store metadata
-            (puthash candidate
-                     (list :file-path file-path
-                           :org-filename org-filename
-                           :org-link-line org-link-line)
-                     metadata-table)
-            (push candidate candidates)))
-
-        ;; Keep chronological order (most recent first, already sorted from server)
-        (setq candidates (nreverse candidates))
-
-        ;; Let user select
-        (let ((selection (completing-read
-                          (format "Open linked file (%d files in database): " count)
-                          candidates
-                          nil t)))
-          (when selection
-            (let* ((metadata (gethash selection metadata-table))
-                   (file-path (plist-get metadata :file-path))
-                   (org-filename (plist-get metadata :org-filename))
-                   (org-link-line (plist-get metadata :org-link-line)))
-              ;; With prefix arg, open the linked file directly
-              ;; Otherwise, open the org file and go to the link
-              (if current-prefix-arg
-                  (if (and file-path (file-exists-p file-path))
-                      (find-file file-path)
-                    (message "Linked file does not exist: %s" file-path))
-                ;; Default: open org file at link location
-                (when (and org-filename (file-exists-p org-filename))
-                  (find-file org-filename)
-                  (goto-char (point-min))
-                  (forward-line (1- org-link-line))
-                  (recenter))))))))))
-
-;;;###autoload
-(defun elfeed-summary-db-property-search (query)
-  "Search entrys by property name and optional value.
-QUERY should be in format \"PROPERTY=PATTERN\" or just \"PROPERTY\".
-Examples:
-  CATEGORY=org-db     Search for CATEGORY property with value matching 'org-db'
-  TODO=DONE          Search for TODO property with value matching 'DONE'
-  CATEGORY           Search for any entry with CATEGORY property"
-  (interactive "sProperty search (PROPERTY or PROPERTY=PATTERN): ")
-
-  (elfeed-summary-db-ensure-server)
-
-  ;; Parse query to extract property and optional value pattern
-  (let* ((parts (split-string query "=" t))
-         (property (string-trim (car parts)))
-         (value (when (cdr parts) (string-trim (cadr parts))))
-         (scope-params (when (fboundp 'elfeed-summary-db--scope-to-params)
-                         (elfeed-summary-db--scope-to-params)))
-         (request-body (append `((property . ,property)
-                                 (limit . 100))
-                               (when value
-                                 (list (cons 'value value)))
-                               (when scope-params
-                                 (list (cons 'filename_pattern (plist-get scope-params :filename_pattern)))))))
-
-    (plz 'post (concat (elfeed-summary-db-server-url) "/api/search/properties")
-      :headers '(("Content-Type" . "application/json"))
-      :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
-      :as #'json-read
-      :then (lambda (response)
-              ;; Reset scope after search
-              (when (boundp 'elfeed-summary-db-search-scope)
-                (setq elfeed-summary-db-search-scope '(all . nil)))
-              (elfeed-summary-db-display-property-results query response))
-      :else (lambda (error)
-              ;; Reset scope even on error
-              (when (boundp 'elfeed-summary-db-search-scope)
-                (setq elfeed-summary-db-search-scope '(all . nil)))
-              (message "Search error: %s" (plz-error-message error))))))
-
-(defun elfeed-summary-db-display-property-results (query response)
-  "Display property search RESPONSE for QUERY using completing-read."
-  (let ((results (alist-get 'results response)))
-
-    (if (zerop (length results))
-        (message "No properties found for: %s" query)
-
-      ;; Build candidates with metadata
-      (let* ((candidates nil)
-             (metadata-table (make-hash-table :test 'equal)))
-
-        (dotimes (i (length results))
-          (let* ((result (elt results i))
-                 (entry-title (alist-get 'entry_title result))
-                 (filename (alist-get 'filename result))
-                 (begin (alist-get 'begin result))
-                 (property (alist-get 'property result))
-                 (value (alist-get 'value result))
-                 ;; Fixed widths for alignment
-                 (title-width 40)
-                 (value-width 20)
-                 (display-title (if (> (length entry-title) title-width)
-                                    (concat (substring entry-title 0 (- title-width 3)) "...")
-                                  entry-title))
-                 (padded-title (format (format "%%-%ds" title-width) display-title))
-                 (display-value (if (> (length value) value-width)
-                                    (concat (substring value 0 (- value-width 3)) "...")
-                                  value))
-                 (padded-value (format (format "%%-%ds" value-width) display-value))
-                 ;; Calculate line number from character position
-                 (line-number (elfeed-summary-db--char-to-line filename begin))
-                 ;; Format: property=value | entry | filename:line
-                 (candidate (format "%s=%-20s | %s | %s:%d"
-                                    property
-                                    padded-value
-                                    padded-title
-                                    filename
-                                    line-number)))
-
-            ;; Store metadata
-            (puthash candidate
-                     (list :file filename
-                           :begin begin
-                           :line line-number)
-                     metadata-table)
-            (push candidate candidates)))
-
-        ;; Keep original order (by filename and position)
-        (setq candidates (nreverse candidates))
-
-        ;; Let user select
-        (let ((selection (completing-read
-                          (format "Property results (%d found): " (length results))
-                          candidates
-                          nil t)))
-          (when selection
-            (let* ((metadata (gethash selection metadata-table))
-                   (file (plist-get metadata :file))
-                   (begin (plist-get metadata :begin)))
-              (when (and file (file-exists-p file))
-                (find-file file)
-                (goto-char begin)
-                (org-show-entry)
-                (recenter)))))))))
 
 (provide 'elfeed-summary-db-search)
 ;;; elfeed-summary-db-search.el ends here
