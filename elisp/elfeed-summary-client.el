@@ -41,29 +41,36 @@ Default 240 seconds (4 minutes). Files that timeout will be skipped."
 (defvar elfeed-summary-db-index-failed-files nil
   "List of files that failed to index in the current operation.")
 
-(defun elfeed-summary-db-index-entry-async (entry_id)
-  "Index entry asynchronously by sending to server.
-Disables local variables and hooks for safe and fast bulk indexing.
-Skips Emacs temporary files (.#*, #*#, *~) and remote Tramp files."
+(defun elfeed-summary-db-index-entry-async (entry)
+  "Index ENTRY-ID asynchronously.
+Fetches the entry from the database and posts it to the vector server."
   (elfeed-summary-db-ensure-server)
 
-  ;; Skip entry without summary
-  (when (elfeed-meta elfeed-show-entry :summary)
-    (error "Skipping entry that has no summary: %s" (elfeed-entry-title entry)))
+  (let ((entry-id (elfeed-entry-id entry)))
+    (if (not entry)
+        (message "Error: Entry ID %s not found in Elfeed DB" entry-id)
 
-  (let ((json-data (elfeed-summary-db-parse-entry-to-json entry_id)))
-    (plz 'post (concat (elfeed-summary-db-server-url) "/api/entry")
-      :headers '(("Content-Type" . "application/json"))
-      :body json-data
-      :as #'json-read
-      :timeout 120  ; Allow time for docling PDF/DOCX conversion
-      :then (lambda (response)
-              (let ((entry_id (alist-get 'entry_id response))
-                    (status (alist-get 'statue response)))
-                (message "Indexed %s, status %s" entry_id status)))
-      :else (lambda (error)
-              (message "Error indexing %s: %s" entry_id status))))
-  )
+      (let ((summary (elfeed-meta entry :summary))
+            (title (elfeed-entry-title entry))
+            (json-data (elfeed-summary-db-parse-entry-to-json entry-id)))
+
+        ;; Logic Check: If there is NO summary, we stop (or log it)
+        (if (not summary)
+            (message "Skipping: '%s' has no summary to vectorize." title)
+
+          ;; The 'plz' call is inherently async
+          (plz 'post (concat (elfeed-summary-db-server-url) "/api/entry")
+            :headers '(("Content-Type" . "application/json"))
+            :body json-data
+            :as #'json-read
+            :timeout 120
+            :then (lambda (response)
+                    (let ((id (alist-get 'entry_id response))
+                          (status (alist-get 'status response)))
+                      (message "Successfully indexed: %s (Status: %s)" title status)))
+            :else (lambda (err)
+                    (let ((err-msg (cl-struct-slot-value 'plz-error 'message err)))
+                      (message "Failed to index '%s': %s" title err-msg)))))))))
 
 (defun elfeed-summary-db-process-index-queue ()
   "Process one file from the index queue.
