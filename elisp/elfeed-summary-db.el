@@ -15,7 +15,8 @@
 
 ;;; Code:
 
-(require 'org)
+(require 'elfeed)
+(require 'elfeed-score)
 (require 'plz)
 (require 'transient)
 
@@ -95,58 +96,26 @@ Uses a 3-second timeout to tolerate busy servers during heavy indexing."
 (require 'elfeed-summary-db-search)
 (require 'elfeed-summary-db-ui)
 
-(defun elfeed-summary-db-hook-function ()
-  "Hook function for org-mode files.
-Adds buffer-local after-save-hook for auto-indexing."
-  (when (and (buffer-file-name)
-             (or (string-suffix-p ".org" (buffer-file-name))
-                 (string-suffix-p ".org_archive" (buffer-file-name))))
-    (when elfeed-summary-db-debug
-      (message "elfeed-summary-db: Adding after-save-hook to buffer %s" (buffer-name)))
-    (add-hook 'after-save-hook #'elfeed-summary-db-after-save-hook nil t)))
-
-(defun elfeed-summary-db-after-save-hook ()
-  "Hook to run after saving an org file.
-Automatically indexes the file after save."
-  (when (buffer-file-name)
-    (when elfeed-summary-db-debug
-      (message "elfeed-summary-db: After-save hook triggered for %s" (buffer-file-name)))
-    (elfeed-summary-db-index-file-async (buffer-file-name))))
+(defun elfeed-summary-db-trigger-after-save (entry _text)
+  "Advice to trigger indexing after the summary is saved to ENTRY.
+_TEXT is ignored because we pull the data directly from the ENTRY object."
+  (message "Summary saved for %s. Triggering async vectorization..."
+           (elfeed-entry-title entry))
+  ;; Pass the entry ID to your indexing function
+  (elfeed-summary-db-index-entry-async (elfeed-entry-id entry)))
 
 (defun elfeed-summary-db-enable ()
   "Enable elfeed-summary-db.
 Adds org-mode-hook for future org files and enables auto-indexing
 for all currently open org buffers."
   (interactive)
-  (add-hook 'org-mode-hook #'elfeed-summary-db-hook-function)
-
-  ;; Also enable for already-open org buffers
-  (dolist (buffer (buffer-list))
-    (with-current-buffer buffer
-      (when (derived-mode-p 'org-mode)
-        (when elfeed-summary-db-debug
-          (message "elfeed-summary-db: Enabling auto-indexing for already-open buffer %s" (buffer-name)))
-        (elfeed-summary-db-hook-function))))
-
-  (message "elfeed-summary-db enabled (auto-indexing on save for %d open org buffers)"
-           (length (seq-filter (lambda (buf)
-                                 (with-current-buffer buf
-                                   (derived-mode-p 'org-mode)))
-                               (buffer-list)))))
+  (advice-add 'my-feed/elfeed-save-summary :after #'elfeed-summary-db-trigger-after-save))
 
 (defun elfeed-summary-db-disable ()
   "Disable elfeed-summary-db.
 Removes org-mode-hook and after-save-hooks from all org buffers."
   (interactive)
-  (remove-hook 'org-mode-hook #'elfeed-summary-db-hook-function)
-
-  ;; Remove after-save-hook from all org buffers
-  (dolist (buffer (buffer-list))
-    (with-current-buffer buffer
-      (when (derived-mode-p 'org-mode)
-        (remove-hook 'after-save-hook #'elfeed-summary-db-after-save-hook t))))
-
-  (message "elfeed-summary-db disabled"))
+  (advice-remove 'my-feed/elfeed-save-summary #'elfeed-summary-db-trigger-after-save))
 
 ;; Auto-enable if configured
 (when elfeed-summary-db-auto-enable
