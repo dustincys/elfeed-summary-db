@@ -12,34 +12,33 @@
 
 ;; Queue for non-blocking directory indexing
 (defvar elfeed-summary-db-index-queue nil
-  "Queue of files waiting to be indexed.")
+  "Queue of entries waiting to be indexed.")
 
 (defvar elfeed-summary-db-index-timer nil
   "Timer for processing the index queue.")
 
 (defvar elfeed-summary-db-index-total 0
-  "Total number of files in current indexing operation.")
+  "Total number of entries in current indexing operation.")
 
 (defvar elfeed-summary-db-index-processed 0
-  "Number of files processed in current indexing operation.")
+  "Number of entries processed in current indexing operation.")
 
 (defcustom elfeed-summary-db-index-delay 0.5
-  "Delay in seconds between indexing files.
+  "Delay in seconds between indexing entries.
 Lower values = faster indexing but less responsive Emacs and higher server load.
 Higher values = slower indexing but more responsive Emacs and prevents server overload.
-Default 0.5s allows time for linked file processing to complete."
+Default 0.5s."
   :type 'number
   :group 'elfeed-summary-db)
 
 (defcustom elfeed-summary-db-index-timeout 240
-  "Timeout in seconds for indexing a single file.
-Files with many large linked files (PDFs, images) may take longer to process.
-Default 240 seconds (4 minutes). Files that timeout will be skipped."
+  "Timeout in seconds for indexing a single entry.
+Default 240 seconds (4 minutes)."
   :type 'number
   :group 'elfeed-summary-db)
 
-(defvar elfeed-summary-db-index-failed-files nil
-  "List of files that failed to index in the current operation.")
+(defvar elfeed-summary-db-index-failed-entries nil
+  "List of entries that failed to index in the current operation.")
 
 (defun elfeed-summary-db-index-entry-async (entry)
   "Index ENTRY-ID asynchronously.
@@ -76,29 +75,29 @@ Fetches the entry from the database and posts it to the vector server."
   "Process one file from the index queue.
 Waits for each request to complete before processing the next entry."
   (if elfeed-summary-db-index-queue
-      (let ((entry_id (pop elfeed-summary-db-index-queue)))
+      (let ((entry (pop elfeed-summary-db-index-queue)))
         (setq elfeed-summary-db-index-processed (1+ elfeed-summary-db-index-processed))
 
         ;; Update progress in echo area
         (message "Indexing [%d/%d]: %s"
                  elfeed-summary-db-index-processed
                  elfeed-summary-db-index-total
-                 (elfeed-entry-title (elfeed-db-get-entry entry_id)))
+                 (elfeed-entry-title entry))
 
-        (elfeed-summary-db-index-file-with-continuation entry_id))
+        (elfeed-summary-db-index-entry-with-continuation entry))
     ;; Queue is empty, clean up
     (setq elfeed-summary-db-index-timer nil)
     (if elfeed-summary-db-index-failed-entries
         (message "Indexing complete: %d entries %s processed, %d failed (see *Messages* for details)"
                  elfeed-summary-db-index-total
                  (if (= elfeed-summary-db-index-total 1) "" "s")
-                 (length elfeed-summary-db-index-failed-files))
+                 (length elfeed-summary-db-index-failed-entries))
       (message "Indexing complete: %d file%s processed"
                elfeed-summary-db-index-total
                (if (= elfeed-summary-db-index-total 1) "" "s")))))
 
-(defun elfeed-summary-db-index-file-with-continuation (entry_id)
-  "Index ENTRY_ID and continue processing queue on completion.
+(defun elfeed-summary-db-index-entry-with-continuation (entry)
+  "Index ENTRY and continue processing queue on completion.
 This ensures requests are processed sequentially, not in parallel.
 Wraps processing in error handling to prevent queue stalls."
   ;; Wrap everything in condition-case to ensure queue continues even on unexpected errors
@@ -108,7 +107,7 @@ Wraps processing in error handling to prevent queue stalls."
 
         ;; Skip entries with no summary
 
-        (let* ((entry (elfeed-db-get-entry entry_id))
+        (let* ((entry-id (elfeed-entry-id entry))
                (summary (elfeed-meta entry :summary))
                (title (elfeed-entry-title entry)))
           (if (not summary)
@@ -212,7 +211,7 @@ Skips entries with no summary."
                     (push entry_id missing-entries)))))
 
               (if (zerop count)
-                  (message "No files found in database")
+                  (message "No entries found in database")
 
                 ;; Show summary and confirm
                 (let ((msg (format "Reindex %d existing entr%s%s%s? "
