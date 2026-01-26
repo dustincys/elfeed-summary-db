@@ -45,31 +45,30 @@ Default 240 seconds (4 minutes)."
 Fetches the entry from the database and posts it to the vector server."
   (elfeed-summary-db-ensure-server)
 
-  (let ((entry-id (elfeed-entry-id entry)))
-    (if (not entry)
-        (message "Error: Entry ID %s not found in Elfeed DB" entry-id)
+  (if (not entry)
+      (message "Error: Entry ID %s not found in Elfeed DB" entry-id)
 
-      (let ((summary (elfeed-meta entry :summary))
-            (title (elfeed-entry-title entry))
-            (json-data (elfeed-summary-db-parse-entry-to-json entry-id)))
+    (let ((summary (elfeed-meta entry :summary))
+          (title (elfeed-entry-title entry))
+          (json-data (elfeed-summary-db-parse-entry-to-json entry)))
 
-        ;; Logic Check: If there is NO summary, we stop (or log it)
-        (if (not summary)
-            (message "Skipping: '%s' has no summary to vectorize." title)
+      ;; Logic Check: If there is NO summary, we stop (or log it)
+      (if (not summary)
+          (message "Skipping: '%s' has no summary to vectorize." title)
 
-          ;; The 'plz' call is inherently async
-          (plz 'post (concat (elfeed-summary-db-server-url) "/api/entry")
-            :headers '(("Content-Type" . "application/json"))
-            :body json-data
-            :as #'json-read
-            :timeout 120
-            :then (lambda (response)
-                    (let ((id (alist-get 'entry_id response))
-                          (status (alist-get 'status response)))
-                      (message "Successfully indexed: %s (Status: %s)" title status)))
-            :else (lambda (err)
-                    (let ((err-msg (cl-struct-slot-value 'plz-error 'message err)))
-                      (message "Failed to index '%s': %s" title err-msg)))))))))
+        ;; The 'plz' call is inherently async
+        (plz 'post (concat (elfeed-summary-db-server-url) "/api/entry")
+          :headers '(("Content-Type" . "application/json"))
+          :body json-data
+          :as #'json-read
+          :timeout 120
+          :then (lambda (response)
+                  (let ((entry_id_str (alist-get 'entry_id response))
+                        (status (alist-get 'status response)))
+                    (message "Successfully indexed: %s (Status: %s)" entry_id_str status)))
+          :else (lambda (err)
+                  (let ((err-msg (cl-struct-slot-value 'plz-error 'message err)))
+                    (message "Failed to index '%s'" err-msg))))))))
 
 (defun elfeed-summary-db-process-index-queue ()
   "Process one file from the index queue.
@@ -107,15 +106,14 @@ Wraps processing in error handling to prevent queue stalls."
 
         ;; Skip entries with no summary
 
-        (let* ((entry-id (elfeed-entry-id entry))
-               (summary (elfeed-meta entry :summary))
+        (let* ((summary (elfeed-meta entry :summary))
                (title (elfeed-entry-title entry)))
           (if (not summary)
               (progn
                 (message "Skipping entry that has no summary: %s" title)
                 ;; Continue with next file in queue
                 (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue))
-            (let ((json-data (elfeed-summary-db-parse-buffer-to-json)))
+            (let ((json-data (elfeed-summary-db-parse-entry-to-json entry)))
               (plz 'post (concat (elfeed-summary-db-server-url) "/api/file")
                 :headers '(("Content-Type" . "application/json"))
                 :body json-data

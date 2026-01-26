@@ -9,14 +9,14 @@
 (require 'seq)  ; For seq-difference
 (require 'elfeed)  ; For seq-difference
 
-(defun elfeed-summary-db-parse-entry-to-json (entry_id)
+(defun elfeed-summary-db-parse-entry-to-json (entry)
   "Parse entry and return JSON string for server."
-  (let* ((entry (elfeed-db-get-entry entry_id))
+  (let* ((entry-id (elfeed-entry-id entry))
          (title (elfeed-entry-title entry))
          (summary (elfeed-meta elfeed-show-entry :summary))
          (content (elfeed-deref (elfeed-entry-content elfeed-show-entry)))
          (md5str (md5 (format "%S %S %S" title summary content)))
-         (data `(("entry_id" . entry_id)
+         (data `(("entry_id" . (prin1-to-string entry_id))
                  ("title" . title)
                  ("summary" . summary)
                  ("content" . content)
