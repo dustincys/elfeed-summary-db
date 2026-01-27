@@ -102,7 +102,7 @@ _TEXT is ignored because we pull the data directly from the ENTRY object."
   (message "Summary saved for %s. Triggering async vectorization..."
            (elfeed-entry-title entry))
   ;; Pass the entry ID to your indexing function
-  (elfeed-summary-db-index-entry-async (elfeed-entry-id entry)))
+  (elfeed-summary-db-index-entry-async entry))
 
 (defun elfeed-summary-db-enable ()
   "Enable elfeed-summary-db.
