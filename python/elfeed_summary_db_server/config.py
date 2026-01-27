@@ -13,9 +13,6 @@ class Settings(BaseSettings):
     port: int = 8765
 
     # Databases - separated for performance and size management
-    # Main database: metadata, headlines, links, properties, FTS5
-    db_path: Path = Path.home() / "elfeed-summary-db" / "elfeed-summary-db.db"
-
     # Semantic search database: text chunks and embeddings (with libsql vector search)
     semantic_db_path: Path = Path.home(
     ) / "elfeed-summary-db" / "elfeed-summary-db-semantic.db"

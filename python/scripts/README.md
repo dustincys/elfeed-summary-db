@@ -27,23 +27,6 @@ Usage:
 cd python
 uv run python scripts/profiling/debug_search_performance.py
 ```
-
-## Migrations
-
-One-time migration scripts for database schema changes:
-
-- **`migrations/migrate_to_f32_blob.py`** - Migrate embeddings to F32_BLOB format for vector search
-- **`migrations/optimize_database.py`** - Optimize database indexes and vacuum
-- **`migrations/implement_file_level_embeddings.py`** - Implement file-level embedding aggregation
-
-⚠️ **Note:** Migration scripts are designed to be run once. Review the script before running to understand what it does.
-
-Usage:
-```bash
-cd python
-uv run python scripts/migrations/migrate_to_f32_blob.py
-```
-
 ## Development
 
 These scripts are not part of the main package but are useful for:

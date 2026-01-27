@@ -1,6 +1,7 @@
 """Tests for text chunking."""
 import pytest
-from org_db_server.services.chunking import chunk_text
+from elfeed_summary_db_server.services.chunking import chunk_text
+
 
 def test_chunk_by_paragraphs():
     """Test chunking text into paragraphs."""

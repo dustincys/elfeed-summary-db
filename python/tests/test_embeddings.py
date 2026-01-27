@@ -1,7 +1,8 @@
 """Tests for embedding service."""
-import pytest
 import numpy as np
-from org_db_server.services.embeddings import EmbeddingService
+import pytest
+from elfeed_summary_db_server.services.embeddings import EmbeddingService
+
 
 @pytest.fixture
 def embedding_service():
