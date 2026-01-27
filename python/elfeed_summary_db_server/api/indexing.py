@@ -1,6 +1,7 @@
 """Indexing API endpoints."""
 import logging
 import os
+from typing import Any, Dict
 
 import psutil
 from elfeed_summary_db_server.config import settings
@@ -60,29 +61,20 @@ async def get_entries() -> Dict[str, Any]:
 
 
 @router.delete("/entry")
-async def delete_entry(title: str) -> Dict[str, Any]:
+async def delete_entry(entry_id: str) -> Dict[str, Any]:
     """Delete an entry and all its associated data from all databases."""
     try:
         # Delete from main database (metadata)
         cursor = db.semantic_conn.cursor()
-        cursor.execute("SELECT rowid FROM entries WHERE title = ?", (title, ))
-        row = cursor.fetchone()
-
-        if not row:
-            raise HTTPException(status_code=404,
-                                detail=f"title not found: {title}")
-
-        entry_id = row[0]
         cursor.execute("DELETE FROM entries WHERE rowid = ?", (entry_id, ))
         db.semantic_conn.commit()
 
         return {
             "status":
             "deleted",
-            "title":
-            title,
+            "entry_id":
             "message":
-            f"Successfully deleted {title} and all associated data from all tables"
+            f"Successfully deleted {entry_id} and all associated data from all tables"
         }
     except HTTPException:
         raise
@@ -102,14 +94,12 @@ async def index_entry(request: IndexEntryRequest):
         logger.info(f"  entry_id: {request.entry_id}")
         logger.info(f"  summary: {request.summary}")
         logger.info(f"  content: {request.content}")
+        logger.info(f"  md5: {request.md5}")
 
         cursor = db.semantic_conn.cursor()
 
         # Delete existing data for this file (we'll re-index everything)
-        cursor.execute("DELETE FROM summary WHERE entry_id = ?",
-                       (request.entry_id, ))
-        cursor.execute("DELETE FROM content WHERE entry_id = ?",
-                       (request.entry_id, ))
+        cursor.execute("DELETE FROM entries WHERE entry_id = ?", (request.entry_id, ))
 
         # Generate chunks from full elfeed entry content for semantic search
         if request.content:
@@ -135,10 +125,15 @@ async def index_entry(request: IndexEntryRequest):
                     f"after embeddings, before storing {len(all_chunks)} elfeed chunks"
                 )
                 # Store chunks and embeddings (semantic DB uses filename not file_id)
-                db.store_chunks(title=request.title,
-                                chunks=all_chunks,
-                                embeddings=embeddings,
-                                model_name=embedding_service.model_name)
+                db.store_chunks(
+                    entry_id = request.entry_id,
+                    title=request.title,
+                    summary=request.summary,
+                    content=request.content,
+                    md5=request.md5,
+                    chunks=all_chunks,
+                    embeddings=embeddings,
+                    model_name=embedding_service.model_name)
                 log_memory_usage("after storing elfeed chunks")
 
         log_memory_usage("before final commit")

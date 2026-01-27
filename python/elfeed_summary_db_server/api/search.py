@@ -248,7 +248,8 @@ async def semantic_search(request: SemanticSearchRequest):
                 chunk_type = row[2]
                 title = row[3]
                 embedding_bytes = row[4]
-                entry_id = row[5]
+                model_check = row[5]
+                entry_id = row[6]
 
                 # Calculate cosine similarity
                 stored_embedding = np.frombuffer(embedding_bytes,
