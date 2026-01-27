@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>org-db v3 Server</title>
+    <title>elfeed db summary Server</title>
     <style>
         * {
             margin: 0;
@@ -224,8 +224,8 @@
 <body>
     <div class="container">
         <header>
-            <h1>org-db v3</h1>
-            <p>Semantic Search & Indexing for Org-Mode</p>
+            <h1>elfeed db summary</h1>
+            <p>Semantic Search & Indexing for elfeed summary</p>
             <div class="status" id="status">Server Running</div>
             <br>
             <button class="stop-button" id="stop-button" onclick="stopServer()">⏹ Stop Server</button>
@@ -236,7 +236,7 @@
             <div class="section">
                 <h2>💾 Database Architecture</h2>
                 <p style="color: #6b7280; margin-bottom: 20px;">
-                    org-db v3 uses a multi-database architecture for better performance and manageability.
+                    elfeed db summary uses a multi-database architecture for better performance and manageability.
                     Data is separated into three specialized databases:
                 </p>
 
@@ -262,17 +262,6 @@
                             Text chunks and embeddings with libsql vector search for semantic similarity
                         </p>
                     </div>
-
-                    <div class="stat-card" style="border-left-color: #f59e0b;">
-                        <h3>🖼️ Image Database</h3>
-                        <div style="font-family: monospace; color: #374151; font-size: 0.85em; margin: 10px 0;" id="image-db-location">
-                            Loading...
-                        </div>
-                        <div class="value" id="image-db-size">-</div>
-                        <p style="color: #6b7280; margin-top: 10px; font-size: 0.85em;">
-                            Images and CLIP embeddings with libsql vector search for image-text matching
-                        </p>
-                    </div>
                 </div>
 
                 <div class="stat-card" style="background: linear-gradient(135deg, #667eea15 0%, #764ba215 100%); border-left-color: #764ba2; margin-top: 20px;">
@@ -295,13 +284,6 @@
                 </div>
             </div>
 
-            <!-- Recent Files Section -->
-            <div class="section">
-                <h2>📁 Recent Files</h2>
-                <ul class="recent-files" id="recent-files">
-                    <li>Loading...</li>
-                </ul>
-            </div>
 
             <!-- Features Section -->
             <div class="section">
@@ -317,25 +299,6 @@
                         </ul>
                     </div>
 
-                    <div class="feature-card">
-                        <h3>📝 Full-Text Search</h3>
-                        <ul>
-                            <li>Fast keyword search with SQLite FTS5</li>
-                            <li>Search headlines, content, and tags</li>
-                            <li>BM25 relevance ranking</li>
-                            <li>Contextual snippets with highlighting</li>
-                        </ul>
-                    </div>
-
-                    <div class="feature-card">
-                        <h3>🖼️ Image Search</h3>
-                        <ul>
-                            <li>Search images by text description</li>
-                            <li>CLIP (ViT-B/32) embeddings</li>
-                            <li>libsql vector search for images</li>
-                            <li>Stored in dedicated image database</li>
-                        </ul>
-                    </div>
 
                     <div class="feature-card">
                         <h3>⚡ Multi-Database Architecture</h3>
@@ -361,9 +324,9 @@
 
                 <div class="endpoint">
                     <span class="method post">POST</span>
-                    <span class="path">/api/file</span>
+                    <span class="path">/api/entry</span>
                     <div class="description">
-                        Index an org file - accepts JSON with filename, md5, file_size, headlines, links, keywords, src_blocks, and images.
+                        Index an elfeed entry - accepts JSON with title, entry_id, summary, content, md5.
                         Automatically generates embeddings and stores in database.
                     </div>
                 </div>
@@ -372,69 +335,15 @@
                     <span class="method post">POST</span>
                     <span class="path">/api/search/semantic</span>
                     <div class="description">
-                        Semantic search by meaning - accepts <code>query</code> (string), <code>limit</code> (int, default 10),
-                        and optional <code>model</code>. Returns ranked results with similarity scores, filenames, and line numbers.
-                    </div>
-                </div>
-
-                <div class="endpoint">
-                    <span class="method post">POST</span>
-                    <span class="path">/api/search/fulltext</span>
-                    <div class="description">
-                        Full-text keyword search using SQLite FTS5 - accepts <code>query</code> (string) and <code>limit</code> (int, default 10).
-                        Returns matching content with snippets and character positions.
-                    </div>
-                </div>
-
-                <div class="endpoint">
-                    <span class="method post">POST</span>
-                    <span class="path">/api/search/images</span>
-                    <div class="description">
-                        Search images by text description using CLIP embeddings - accepts <code>query</code> (string) and <code>limit</code> (int, default 10).
-                        Returns images with similarity scores and file locations.
-                    </div>
-                </div>
-
-                <div class="endpoint">
-                    <span class="method post">POST</span>
-                    <span class="path">/api/search/headlines</span>
-                    <div class="description">
-                        Search org headlines - accepts <code>query</code> (string) and <code>limit</code> (int, default 10).
-                        Returns matching headlines with their full paths and metadata.
+                        Semantic search by meaning - accepts <code>query</code> (string), <code>title</code> (string),
+                        and optional <code>model</code>. Returns ranked results with similarity scores, entry titles.
                     </div>
                 </div>
 
                 <div class="endpoint">
                     <span class="method">GET</span>
                     <span class="path">/api/stats/</span>
-                    <div class="description">Get comprehensive database statistics including file counts, embeddings, links, and database size</div>
-                </div>
-
-                <div class="endpoint">
-                    <span class="method">GET</span>
-                    <span class="path">/api/stats/files</span>
-                    <div class="description">Get list of all indexed files with timestamps</div>
-                </div>
-
-                <div class="endpoint">
-                    <span class="method delete">DELETE</span>
-                    <span class="path">/api/file?filename=/path/to/file.org</span>
-                    <div class="description">Remove a file and all its associated data from the database</div>
-                </div>
-
-                <div class="endpoint">
-                    <span class="method post">POST</span>
-                    <span class="path">/api/agenda</span>
-                    <div class="description">
-                        Get agenda items (TODOs, deadlines, scheduled) - accepts <code>days_ahead</code> (int, default 7).
-                        Returns TODO items with their deadlines and scheduled dates.
-                    </div>
-                </div>
-
-                <div class="endpoint">
-                    <span class="method">GET</span>
-                    <span class="path">/docs</span>
-                    <div class="description">Interactive API documentation with Swagger UI - test endpoints directly in your browser</div>
+                    <div class="description">Get comprehensive database statistics including entry counts, embeddings and database size</div>
                 </div>
             </div>
 
@@ -451,39 +360,26 @@
                 <h3 style="color: #667eea; margin-top: 20px; margin-bottom: 10px;">2. Search Commands</h3>
                 <ul style="margin-left: 20px; line-height: 1.8;">
                     <li><code>v</code> - <strong>Semantic search</strong> - Find content by meaning using embeddings</li>
-                    <li><code>k</code> - <strong>Full-text search</strong> - Traditional keyword search with FTS5</li>
-                    <li><code>h</code> - <strong>Headline search</strong> - Browse and jump to org headlines</li>
-                    <li><code>i</code> - <strong>Image search</strong> - Find images by text description (CLIP)</li>
-                    <li><code>p</code> - <strong>Search at point</strong> - Search using selected text or sentence at point</li>
                 </ul>
 
                 <h3 style="color: #667eea; margin-top: 20px; margin-bottom: 10px;">3. Indexing Commands</h3>
                 <ul style="margin-left: 20px; line-height: 1.8;">
-                    <li><code>u</code> - Update current file</li>
-                    <li><code>U</code> - Update all open org buffers</li>
-                    <li><code>d</code> - Index entire directory</li>
-                    <li><code>r</code> - Reindex all files in database</li>
-                </ul>
-
-                <h3 style="color: #667eea; margin-top: 20px; margin-bottom: 10px;">4. Other Features</h3>
-                <ul style="margin-left: 20px; line-height: 1.8;">
-                    <li><code>a</code> - <strong>Agenda</strong> - View TODOs, deadlines, and scheduled items</li>
-                    <li><code>f</code> - <strong>Open file</strong> - Browse and open any file in the database</li>
-                    <li><code>W</code> - Open this web interface</li>
-                    <li><code>L</code> - View server logs</li>
+                    <li><code>u</code> - Update current entry</li>
+                    <li><code>U</code> - Update all entries</li>
+                    <li><code>r</code> - Reindex database</li>
                 </ul>
 
                 <h3 style="color: #667eea; margin-top: 20px; margin-bottom: 10px;">5. First Time Setup</h3>
                 <div style="background: #f9fafb; padding: 15px; border-radius: 5px; border-left: 4px solid #10b981; margin-top: 10px;">
                     <p style="margin-bottom: 10px;">Add to your Emacs config:</p>
-                    <pre style="background: #e5e7eb; padding: 10px; border-radius: 3px; overflow-x: auto;"><code>(add-to-list 'load-path "/path/to/org-db-v3/elisp")
-(require 'org-db-v3)
+                    <pre style="background: #e5e7eb; padding: 10px; border-radius: 3px; overflow-x: auto;"><code>(add-to-list 'load-path "/path/to/elfeed-db-summary/elisp")
+(require 'elfeed-db-summary)
 
 ;; Bind the menu to a convenient key
-(global-set-key (kbd "H-v") 'org-db-menu)
+(global-set-key (kbd "H-v") 'elfeed-db-summary-menu)
 
 ;; Auto-start server when Emacs starts (optional)
-(setq org-db-v3-auto-start-server t)</code></pre>
+(setq elfeed-db-summary-auto-start-server t)</code></pre>
                 </div>
             </div>
 
@@ -500,7 +396,7 @@
         </div>
 
         <footer>
-            <p>org-db v3 - Powered by FastAPI, SQLite, Sentence Transformers, and CLIP</p>
+            <p>elfeed db summary - Powered by FastAPI, SQLite, Sentence Transformers, and CLIP</p>
             <p style="margin-top: 5px;">
                 <a href="/docs" style="color: #667eea; text-decoration: none;">API Documentation</a> |
                 <a href="/health" style="color: #667eea; text-decoration: none;">Health Check</a>
@@ -520,17 +416,9 @@
                 document.getElementById('status').style.background = '#10b981';
 
                 // Update database locations and sizes
-                if (stats.main_db_path) {
-                    document.getElementById('main-db-location').textContent = stats.main_db_path;
-                    document.getElementById('main-db-size').textContent = stats.main_db_size_mb + ' MB';
-                }
                 if (stats.semantic_db_path) {
                     document.getElementById('semantic-db-location').textContent = stats.semantic_db_path;
                     document.getElementById('semantic-db-size').textContent = stats.semantic_db_size_mb + ' MB';
-                }
-                if (stats.image_db_path) {
-                    document.getElementById('image-db-location').textContent = stats.image_db_path;
-                    document.getElementById('image-db-size').textContent = stats.image_db_size_mb + ' MB';
                 }
                 if (stats.total_db_size_mb) {
                     document.getElementById('total-db-size').textContent = stats.total_db_size_mb + ' MB';
@@ -540,21 +428,8 @@
                 const statsGrid = document.getElementById('stats-grid');
                 statsGrid.innerHTML = `
                     <div class="stat-card">
-                        <h3>Org Files Indexed</h3>
-                        <div class="value">${stats.org_files_count}</div>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Other Files Indexed</h3>
-                        <div class="value">${stats.linked_files_count}</div>
-                        <p style="font-size: 0.75em; color: #6b7280; margin-top: 5px;">PDF, DOCX, etc.</p>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Headlines</h3>
-                        <div class="value">${stats.headlines_count}</div>
-                    </div>
-                    <div class="stat-card">
-                        <h3>Links</h3>
-                        <div class="value">${stats.links_count}</div>
+                        <h3>elfeed entry Indexed</h3>
+                        <div class="value">${stats.entries_count}</div>
                     </div>
                     <div class="stat-card">
                         <h3>Text Chunks</h3>
@@ -565,31 +440,11 @@
                         <div class="value">${stats.embeddings_count}</div>
                     </div>
                     <div class="stat-card">
-                        <h3>Images</h3>
-                        <div class="value">${stats.images_count}</div>
-                    </div>
-                    <div class="stat-card">
-                        <h3>FTS Entries</h3>
-                        <div class="value">${stats.fts_entries_count}</div>
-                    </div>
-                    <div class="stat-card">
                         <h3>Database Size</h3>
                         <div class="value">${stats.db_size_mb} MB</div>
                     </div>
                 `;
 
-                // Update recent files
-                const recentFiles = document.getElementById('recent-files');
-                if (stats.recent_files && stats.recent_files.length > 0) {
-                    recentFiles.innerHTML = stats.recent_files.map(file => `
-                        <li>
-                            <span class="filename">${file.filename}</span>
-                            <span class="time">${new Date(file.indexed_at).toLocaleString()}</span>
-                        </li>
-                    `).join('');
-                } else {
-                    recentFiles.innerHTML = '<li>No files indexed yet</li>';
-                }
             } catch (error) {
                 console.error('Error loading stats:', error);
                 document.getElementById('status').textContent = 'Error Loading Stats';
