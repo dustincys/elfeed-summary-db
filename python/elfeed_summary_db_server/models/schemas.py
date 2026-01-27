@@ -4,23 +4,6 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
-class HeadlineData(BaseModel):
-    """Headline data from Emacs."""
-    title: str
-    level: int
-    todo_keyword: Optional[str] = None
-    todo_type: Optional[str] = None
-    archivedp: Optional[bool] = None
-    commentedp: Optional[bool] = None
-    begin: int
-    end: Optional[int] = None
-    tags: Optional[str] = None
-    priority: Optional[str] = None
-    scheduled: Optional[str] = None
-    deadline: Optional[str] = None
-    properties: Optional[Dict[str, str]] = None
-
-
 class IndexEntryRequest(BaseModel):
     """Request to index an entry."""
     entry_id: str
@@ -60,85 +43,3 @@ class SemanticSearchResponse(BaseModel):
     query: str
     model_used: str
     reranked: bool = False  # True if results were reranked
-
-class FulltextSearchRequest(BaseModel):
-    """Request for full-text search."""
-    query: str = Field(..., min_length=1, description="Search query (FTS5 syntax)")
-    limit: int = Field(default=10, ge=1, le=100, description="Maximum number of results")
-    filename_pattern: Optional[str] = Field(default=None, description="SQL LIKE pattern for directory/project scope")
-    keyword: Optional[str] = Field(default=None, description="Keyword/tag filter")
-
-class FulltextSearchResult(BaseModel):
-    """Single fulltext search result."""
-    filename: str
-    title: str
-    content: str
-    tags: str
-    snippet: str
-    rank: float
-
-class FulltextSearchResponse(BaseModel):
-    """Response from fulltext search."""
-    results: List[FulltextSearchResult]
-    query: str
-
-class ImageSearchRequest(BaseModel):
-    """Request for image search by text description."""
-    query: str = Field(..., min_length=1, description="Text description of image")
-    limit: int = Field(default=10, ge=1, le=100, description="Maximum number of results")
-    filename_pattern: Optional[str] = Field(default=None, description="SQL LIKE pattern for directory/project scope")
-    keyword: Optional[str] = Field(default=None, description="Keyword/tag filter")
-
-class ImageSearchResult(BaseModel):
-    """Single image search result."""
-    image_path: str
-    similarity_score: float
-    filename: str
-
-class ImageSearchResponse(BaseModel):
-    """Response from image search."""
-    results: List[ImageSearchResult]
-    query: str
-    model_used: str
-
-class HeadlineSearchRequest(BaseModel):
-    """Request for headline search."""
-    query: str = Field(default="", description="Search query (empty for all headlines)")
-    limit: Optional[int] = Field(default=None, ge=1, le=200000, description="Maximum number of results (None = unlimited)")
-    filename_pattern: Optional[str] = Field(default=None, description="SQL LIKE pattern for directory/project scope")
-    keyword: Optional[str] = Field(default=None, description="Keyword/tag filter")
-    sort_by: str = Field(default="last_updated", description="Sort order: 'filename' (alphabetical), 'last_updated' (most recent first), 'indexed_at' (most recently indexed first)")
-
-class HeadlineSearchResult(BaseModel):
-    """Single headline search result."""
-    title: str
-    filename: str
-    begin: int
-    level: int
-    tags: Optional[str] = None
-    todo_keyword: Optional[str] = None
-
-class HeadlineSearchResponse(BaseModel):
-    """Response from headline search."""
-    results: List[List]  # Simple list of [title, filename, begin] for performance
-    query: str
-
-class PropertySearchRequest(BaseModel):
-    """Request for property search."""
-    property: str = Field(..., min_length=1, description="Property name to search for")
-    value: Optional[str] = Field(default=None, description="Optional property value to match")
-    limit: int = Field(default=20, ge=1, le=100, description="Maximum number of results")
-    filename_pattern: Optional[str] = Field(default=None, description="SQL LIKE pattern for directory/project scope")
-
-class PropertySearchResult(BaseModel):
-    """Single property search result."""
-    headline_title: str
-    filename: str
-    begin: int
-    property: str
-    value: str
-
-class PropertySearchResponse(BaseModel):
-    """Response from property search."""
-    results: List[PropertySearchResult]
-    property: str
