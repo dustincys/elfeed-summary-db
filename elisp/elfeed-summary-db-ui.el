@@ -20,22 +20,14 @@
 (defvar elfeed-summary-db-search-scope '(all . nil)
   "Current search scope. Format: (type . value)
    - (all . nil) - search all files
-   - (directory . \"/path/to/dir/\") - files under directory
-   - (project . \"/path/to/project/\") - files in project root
-   - (tag . \"tag-name\") - files with specific keyword/tag
+   - (title_pattern . \"title\") - title pattern
    Resets to (all . nil) after each search.")
 
 (defun elfeed-summary-db--scope-description ()
   "Return current scope description for transient header."
   (pcase (car elfeed-summary-db-search-scope)
-    ('all "All files")
-    ('directory (format "Directory: %s"
-                        (file-name-nondirectory
-                         (directory-file-name (cdr elfeed-summary-db-search-scope)))))
-    ('project (format "Project: %s"
-                      (file-name-nondirectory
-                       (directory-file-name (cdr elfeed-summary-db-search-scope)))))
-    ('tag (format "Tag: %s" (cdr elfeed-summary-db-search-scope)))
+    ('all "All entries")
+    ('title_pattern "title pattern")
     (_ "All files")))
 
 (defun elfeed-summary-db--scope-to-params ()
@@ -43,12 +35,8 @@
 Returns plist with :filename_pattern and/or :keyword."
   (pcase (car elfeed-summary-db-search-scope)
     ('all nil)
-    ('directory
-     (list :filename_pattern (concat (cdr elfeed-summary-db-search-scope) "%")))
-    ('project
-     (list :filename_pattern (concat (cdr elfeed-summary-db-search-scope) "%")))
-    ('tag
-     (list :keyword (cdr elfeed-summary-db-search-scope)))
+    ('title_pattern
+     (list :title_pattern (concat (cdr elfeed-summary-db-search-scope) "%")))
     (_ nil)))
 
 ;; Transient infix for all files scope
@@ -57,69 +45,28 @@ Returns plist with :filename_pattern and/or :keyword."
   :class 'transient-lisp-variable
   :variable 'elfeed-summary-db-search-scope
   :key "-a"
-  :description "All files"
+  :description "All entries"
   :reader (lambda (&rest _) '(all . nil)))
 
-;; Transient infix for directory scope
-(transient-define-infix elfeed-summary-db--scope-directory-infix ()
-  "Set search scope to a directory."
-  :class 'transient-lisp-variable
-  :variable 'elfeed-summary-db-search-scope
-  :key "-d"
-  :description "Directory"
-  :reader (lambda (prompt _initial-input _history)
-            (let ((dir (read-directory-name "Limit search to directory: ")))
-              (when dir
-                (cons 'directory (expand-file-name dir))))))
-
-;; Transient infix for project scope
-(transient-define-infix elfeed-summary-db--scope-project-infix ()
-  "Set search scope to a Projectile project."
-  :class 'transient-lisp-variable
-  :variable 'elfeed-summary-db-search-scope
-  :key "-p"
-  :description "Project"
-  :reader (lambda (prompt _initial-input _history)
-            (if (and (fboundp 'projectile-completing-read)
-                     (fboundp 'projectile-relevant-known-projects))
-                (let* ((projects (projectile-relevant-known-projects))
-                       (current-project (when (fboundp 'projectile-project-root)
-                                          (projectile-project-root)))
-                       (project (if projects
-                                    (projectile-completing-read
-                                     "Select project: "
-                                     projects
-                                     :initial-input current-project)
-                                  current-project)))
-                  (if project
-                      (cons 'project project)
-                    (prog1 nil
-                      (message "No project selected. Scope unchanged."))))
-              (prog1 nil
-                (message "Projectile not available. Scope unchanged.")
-                (ding)))))
-
 ;; Transient infix for tag scope
-(transient-define-infix elfeed-summary-db--scope-tag-infix ()
-  "Set search scope to files with a specific keyword/tag."
+(transient-define-infix elfeed-summary-db--scope-title-pattern-infix ()
+  "Set search scope to titles with a specific pattern."
   :class 'transient-lisp-variable
   :variable 'elfeed-summary-db-search-scope
   :key "-t"
-  :description "Tag/keyword"
+  :description "Title pattern"
   :reader (lambda (prompt _initial-input _history)
-            (let ((tag (read-string "Limit search to keyword/tag: ")))
-              (when (and tag (not (string-empty-p tag)))
-                (cons 'tag tag)))))
+            (let ((title_pattern (read-string "Title pattern: ")))
+              (when (and title_pattern (not (string-empty-p title_pattern)))
+                (cons 'title_pattern title_pattern)))))
 
-;;;###autoload (autoload 'org-db-menu "elfeed-summary-db-ui" nil t)
-(transient-define-prefix org-db-menu ()
+;;;###autoload (autoload 'elfeed-summary-db-menu "elfeed-summary-db-ui" nil t)
+(transient-define-prefix elfeed-summary-db-menu ()
   [:description (lambda () (format "elfeed-summary db [Scope: %s]" (elfeed-summary-db--scope-description)))
                 "Search and manage your org files."]
   [["Scope"
     ("-a" elfeed-summary-db--scope-all-infix)
-    ("-d" elfeed-summary-db--scope-directory-infix)
-    ("-p" elfeed-summary-db--scope-project-infix)
-    ("-t" elfeed-summary-db--scope-tag-infix)]
+    ("-t" elfeed-summary-db--scope-title-pattern-infix)]
    ["Actions"
     ("q" "Quit" transient-quit-one)]]
   ["Search"
@@ -127,40 +74,16 @@ Returns plist with :filename_pattern and/or :keyword."
     ("v" "Semantic search" elfeed-summary-db--semantic-search-dispatch
      :description (lambda () (if (fboundp 'ivy-read)
                                  "Vector embeddings (dynamic)"
-                               "Vector embeddings")))
-    ("k" "Full-text search" elfeed-summary-db--fulltext-search-dispatch
-     :description (lambda () (if (fboundp 'ivy-read)
-                                 "FTS5 keywords (dynamic)"
-                               "FTS5 keywords")))
-    ("h" "Headline search" elfeed-summary-db-headline-search
-     :description "Browse headlines")
-    ("P" "Property search" elfeed-summary-db-property-search
-     :description "PROPERTY=VALUE")
-    ("p" "Search at point" elfeed-summary-db-search-at-point
-     :description "Text at point/region")]
-   ["Image Search"
-    ("i" "Search images" elfeed-summary-db--image-search-dispatch
-     :description (lambda () (if (fboundp 'ivy-read)
-                                 "CLIP embeddings (dynamic)"
-                               "CLIP embeddings")))]
-   ["Files"
-    ("f" "Open file from db" elfeed-summary-db-open-file
-     :description "Browse org files")
-    ("F" "Open linked file" elfeed-summary-db-open-linked-file
-     :description "Browse linked files")]]
-  ["Agenda"
-   ("a" "Show agenda" elfeed-summary-db-agenda
-    :description "TODOs & deadlines")]
+                               "Vector embeddings")))]
+   ]
   ["Management"
    ["Indexing"
-    ("u" "Update current file" elfeed-summary-db-update-current-file
-     :description "Index current file")
-    ("U" "Update all open files" elfeed-summary-db-update-all-buffers
-     :description "Index all open buffers")
-    ("d" "Index directory" elfeed-summary-db-index-directory
-     :description "Index directory recursively")
+    ("u" "Update current entry" elfeed-summary-db-update-current-entry
+     :description "Index current entry")
+    ("U" "Update all entries" elfeed-summary-db-index-elfeed
+     :description "Index all entries")
     ("r" "Reindex database" elfeed-summary-db-reindex-database
-     :description "Reindex all files")]
+     :description "Reindex all entries")]
    ["Server"
     ("S" "Server status" elfeed-summary-db-server-status
      :description "Check server status")
@@ -181,22 +104,15 @@ Returns plist with :filename_pattern and/or :keyword."
       (call-interactively 'elfeed-summary-db-semantic-search-ivy)
     (call-interactively 'elfeed-summary-db-semantic-search)))
 
-;;;###autoload
-(defun elfeed-summary-db--fulltext-search-dispatch ()
-  "Dispatch to ivy or standard fulltext search based on availability."
-  (interactive)
-  (if (fboundp 'ivy-read)
-      (call-interactively 'elfeed-summary-db-fulltext-search-ivy)
-    (call-interactively 'elfeed-summary-db-fulltext-search)))
 
 
 ;;;###autoload
-(defun elfeed-summary-db-update-current-file ()
-  "Manually update the current file."
+(defun elfeed-summary-db-update-current-entry ()
+  "Manually update the current entry."
   (interactive)
   (if (buffer-file-name)
       (progn
-        (elfeed-summary-db-index-file-async (buffer-file-name))
+        (elfeed-summary-db-index-entry-async (buffer-file-name))
         (message "Indexing %s..." (buffer-file-name)))
     (message "No file associated with current buffer")))
 
@@ -210,7 +126,7 @@ Returns plist with :filename_pattern and/or :keyword."
         (when (and (buffer-file-name)
                    (or (string-suffix-p ".org" (buffer-file-name))
                        (string-suffix-p ".org_archive" (buffer-file-name))))
-          (elfeed-summary-db-index-file-async (buffer-file-name))
+          (elfeed-summary-db-index-entry-async (buffer-file-name))
           (setq count (1+ count)))))
     (message "Sent %d org file%s to server for indexing"
              count
@@ -222,14 +138,14 @@ Returns plist with :filename_pattern and/or :keyword."
   (interactive)
   (elfeed-summary-db-ensure-server)
   (if (elfeed-summary-db-server-running-p)
-      (message "org-db server is running on %s" (elfeed-summary-db-server-url))
-    (message "org-db server is not running")))
+      (message "elfeed-summary-db server is running on %s" (elfeed-summary-db-server-url))
+    (message "elfeed-summary-db server is not running")))
 
 ;;;###autoload
 (defun elfeed-summary-db-restart-server ()
-  "Restart the org-db server."
+  "Restart the elfeed-summary-db server."
   (interactive)
-  (when (yes-or-no-p "Restart org-db server? ")
+  (when (yes-or-no-p "Restart elfeed-summary-db server? ")
     (elfeed-summary-db-stop-server)
     (sleep-for 1)
     (elfeed-summary-db-start-server)
@@ -239,7 +155,7 @@ Returns plist with :filename_pattern and/or :keyword."
 (defun elfeed-summary-db-view-logs ()
   "View the server log file."
   (interactive)
-  (let ((log-file "/tmp/org-db-server.log"))
+  (let ((log-file "/tmp/elfeed-summary-db-server.log"))
     (if (file-exists-p log-file)
         (progn
           (find-file-other-window log-file)
@@ -250,18 +166,18 @@ Returns plist with :filename_pattern and/or :keyword."
 
 ;;;###autoload
 (defun elfeed-summary-db-open-web-interface ()
-  "Open the org-db server web interface in a browser."
+  "Open the elfeed-summary-db server web interface in a browser."
   (interactive)
   (elfeed-summary-db-ensure-server)
   (if (elfeed-summary-db-server-running-p)
       (progn
         (browse-url (elfeed-summary-db-server-url))
-        (message "Opening org-db web interface at %s" (elfeed-summary-db-server-url)))
-    (message "org-db server is not running")))
+        (message "Opening elfeed-summary-db web interface at %s" (elfeed-summary-db-server-url)))
+    (message "elfeed-summary-db server is not running")))
 
-;; Make org-db-menu available as M-x org-db
+;; Make elfeed-summary-db-menu available as M-x elfeed-summary-db
 ;;;###autoload
-(defalias 'org-db 'org-db-menu)
+(defalias 'elfeed-summary-db 'elfeed-summary-db-menu)
 
 (provide 'elfeed-summary-db-ui)
 ;;; elfeed-summary-db-ui.el ends here

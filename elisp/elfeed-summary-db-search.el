@@ -31,9 +31,6 @@
 (declare-function ivy-read "ivy")
 (declare-function ivy-configure "ivy")
 
-;; Forward declare scope variable
-(defvar elfeed-summary-db-search-scope)
-
 ;; Require plz only when available (not in tests)
 (when (require 'plz nil t)
   (defvar plz-available t))
@@ -106,14 +103,8 @@ Retrieve up to LIMIT results (default `elfeed-summary-db-search-default-limit').
       :body (json-encode (seq-filter (lambda (pair) (cdr pair)) request-body))
       :as #'json-read
       :then (lambda (response)
-              ;; Reset scope after search
-              (when (boundp 'elfeed-summary-db-search-scope)
-                (setq elfeed-summary-db-search-scope '(all . nil)))
               (elfeed-summary-db-display-search-results query response))
       :else (lambda (error)
-              ;; Reset scope even on error
-              (when (boundp 'elfeed-summary-db-search-scope)
-                (setq elfeed-summary-db-search-scope '(all . nil)))
               (message "Search error: %s" (plz-error-message error))))))
 
 (defun elfeed-summary-db-display-search-results (query response)

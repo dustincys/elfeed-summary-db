@@ -1,5 +1,6 @@
 """Configuration management for elfeed-summary-db server."""
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings
 
@@ -24,9 +25,9 @@ class Settings(BaseSettings):
     default_clip_model: str = "clip-ViT-B-32"
 
     # Indexing for org files - using aggressive chunking to reduce DB size
-    org_chunk_method: str = "fixed"  # "paragraph" or "fixed"
-    org_chunk_size: int = 2048  # Aggressive: larger chunks = fewer embeddings
-    org_chunk_overlap: int = 200  # Overlap for context
+    elfeed_chunk_method: Literal["fixed", "paragraph"] = "fixed"  # "paragraph" or "fixed"
+    elfeed_chunk_size: int = 2048  # Aggressive: larger chunks = fewer embeddings
+    elfeed_chunk_overlap: int = 200  # Overlap for context
 
     # Feature flags
     enable_linked_files: bool = False  # Disabled to prevent database bloat
@@ -38,7 +39,7 @@ class Settings(BaseSettings):
     linked_file_chunk_overlap: int = 200
 
     class Config:
-        env_prefix = "ORG_DB_"
+        env_prefix = "ELFEED_SUMMARY_DB_"
 
 
 settings = Settings()

@@ -14,7 +14,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
-from elfeed_summary_db_server.api import indexing, linked_files, search, stats
+from elfeed_summary_db_server.api import indexing, search, stats
 from elfeed_summary_db_server.log_handler import get_memory_handler
 
 # Set up logging
@@ -36,9 +36,8 @@ async def lifespan(app: FastAPI):
     logger.info("Server shutting down, closing database connections...")
     try:
         # Close database connections from all API modules
-        from elfeed_summary_db_server.api import (indexing, linked_files,
-                                                  search, stats)
-        for module in [indexing, search, stats, linked_files]:
+        from elfeed_summary_db_server.api import indexing, search, stats
+        for module in [indexing, search, stats]:
             if hasattr(module, 'db'):
                 module.db.close()
                 logger.info(f"Closed database connection in {module.__name__}")
@@ -63,7 +62,6 @@ app.add_middleware(
 app.include_router(indexing.router)
 app.include_router(search.router)
 app.include_router(stats.router)
-app.include_router(linked_files.router)
 
 
 @app.get("/health")
