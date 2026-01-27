@@ -28,7 +28,7 @@ class Database:
         self.semantic_path = semantic_path
 
         # Connect to database
-        self.semantic_conn = libsql.connect(str(semantic_path))
+        self.semantic_conn = libsql.connect(str(semantic_path)) # type: ignore[attr-defined]
 
         # Enable foreign keys on connection
         self.semantic_conn.execute("PRAGMA foreign_keys = ON")
