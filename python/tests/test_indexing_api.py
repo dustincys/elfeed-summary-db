@@ -1,12 +1,13 @@
 """Tests for indexing API endpoints."""
-import pytest
-from fastapi.testclient import TestClient
 from pathlib import Path
 
-from org_db_server.main import app
-from org_db_server.services.database import Database
-from org_db_server.config import settings
-from org_db_server.api import indexing
+import pytest
+from elfeed_summary_db_server.api import indexing
+from elfeed_summary_db_server.config import settings
+from elfeed_summary_db_server.main import app
+from elfeed_summary_db_server.services.database import Database
+from fastapi.testclient import TestClient
+
 
 @pytest.fixture
 def client(tmp_path):
@@ -28,81 +29,19 @@ def client(tmp_path):
     indexing.db = old_indexing_db
     db.close()
 
-def test_index_file_endpoint(client):
-    """Test POST /api/file endpoint."""
+def test_index_entry_endpoint(client):
+    """Test POST /api/entry endpoint."""
     payload = {
-        "filename": "/test/sample.org",
-        "md5": "abc123",
-        "file_size": 1024,
-        "headlines": [
-            {
-                "title": "Test Heading",
-                "level": 1,
-                "todo_keyword": "TODO",
-                "tags": ":test:",
-                "begin": 10,
-                "end": 50
-            }
-        ],
-        "links": [],
-        "keywords": [
-            {"key": "TITLE", "value": "Test", "begin": 0}
-        ],
-        "src_blocks": []
+        "entry_id": "(\"www.nature.com\" . \"https://www.nature.com/articles/s41586-025-09876-1\")",
+        "title": "test title",
+        "summary": "该文章是一篇关于肿瘤免疫学的论文评述，主要总结了Xu等人发表在《自然·癌症》上的研究。以下是总结： **1. 生物学实验设计** *   采用体内CRISPR筛选技术，寻找影响抗肿瘤免疫的癌症细胞内在基因。 *   重点关注细胞质核酸传感器激活这一启动抗肿瘤免疫的关键早期步骤。 *   旨在揭示控制这些传感器活性的未知机制。 **2. 数据如何生成** *   通过体内CRISPR筛选，将CDK10鉴定为与免疫逃避相关的候选基因。 *   在肿瘤细胞中敲除CDK10，观察其对免疫反应的影响。 *   分析CDK10缺失如何影响免疫刺激性核酸的产生。 **3. 论文的创新点** *   首次将CDK10确定为癌症细胞内在的免疫逃避驱动因子。 *   揭示了CDK10通过限制免疫刺激性核酸的产生来抑制先天免疫感应的新机制。 *   为理解肿瘤细胞如何主动抑制免疫识别提供了新的视角。 **4. 结论** *   CDK10是肿瘤细胞实现免疫逃避的一个关键内在因子。 *   其作用机制是限制免疫刺激性核酸的产生，从而抑制细胞质核酸传感器的激活和后续的抗肿瘤免疫反应。 *   这项研究为开发针对CDK10的癌症免疫治疗新策略提供了潜在靶点。",
+"content": "",
+"md5": "abc123",
     }
 
-    response = client.post("/api/file", json=payload)
+    response = client.post("/api/entry", json=payload)
 
     assert response.status_code == 200
     data = response.json()
-    assert "file_id" in data
+    assert "entry_id" in data
     assert data["status"] == "indexed"
-
-def test_fts_populated_during_indexing(client, tmp_path):
-    """Test that FTS5 table is populated when indexing."""
-    # Index a file with content
-    payload = {
-        "filename": "/test/fts_test.org",
-        "md5": "fts123",
-        "file_size": 512,
-        "headlines": [
-            {
-                "title": "Machine Learning Introduction",
-                "level": 1,
-                "todo_keyword": None,
-                "tags": ":ai:ml:",
-                "begin": 10,
-                "end": 200
-            },
-            {
-                "title": "Deep Neural Networks",
-                "level": 2,
-                "todo_keyword": None,
-                "tags": ":ai:",
-                "begin": 201,
-                "end": 400
-            }
-        ],
-        "links": [],
-        "keywords": [],
-        "src_blocks": []
-    }
-
-    response = client.post("/api/file", json=payload)
-    assert response.status_code == 200
-
-    # Query FTS5 table to verify content was indexed
-    db = Database(tmp_path / "test.db")
-    cursor = db.conn.cursor()
-
-    # Search for "machine"
-    cursor.execute("SELECT * FROM fts_content WHERE fts_content MATCH 'machine'")
-    results = cursor.fetchall()
-    assert len(results) > 0
-
-    # Search for "neural"
-    cursor.execute("SELECT * FROM fts_content WHERE fts_content MATCH 'neural'")
-    results = cursor.fetchall()
-    assert len(results) > 0
-
-    db.close()
