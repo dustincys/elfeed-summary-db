@@ -17,35 +17,31 @@
 
 (defun elfeed-summary-db-gptel--format-search-result (result)
   "Format a single search RESULT for LLM consumption."
-  (let ((filename (alist-get 'filename result))
-        (chunk-text (alist-get 'chunk_text result))
-        (similarity (alist-get 'similarity_score result))
-        (begin-line (alist-get 'begin_line result))
-        (linked-file (alist-get 'linked_file_path result))
-        (linked-type (alist-get 'linked_file_type result)))
-    (format "File: %s%s\nLine: %d\nRelevance: %.3f\nContent:\n%s\n"
-            filename
-            (if linked-file
-                (format " [linked %s file: %s]"
-                        (upcase (or linked-type ""))
-                        (file-name-nondirectory linked-file))
-              "")
-            begin-line
+  (let* ((chunk-id (alist-get 'chunk_id result))
+         (chunk-text (alist-get 'chunk_text result))
+         (similarity (alist-get 'similarity_score result))
+         (title (alist-get 'title result))
+         (chunk-type (alist-get 'chunk_type result))
+         (entry-id (alist-get 'entry_id result))
+         (summary (elfeed-meta (elfeed-db-get-entry entry-id) :summary)))
+    (format "Title %s%s\nEntry: %s\nRelevance: %.3f\nSummary:\n%s\n"
+            title
+            entry-id
             similarity
-            chunk-text)))
+            summary)))
 
-(defun elfeed-summary-db-gptel--semantic-search (query &optional limit filename-pattern)
+(defun elfeed-summary-db-gptel--semantic-search (query &optional limit title-pattern)
   "Perform semantic search for QUERY.
 Returns up to LIMIT results (default from `elfeed-summary-db-gptel-search-limit').
-Optional FILENAME-PATTERN restricts search to matching files."
+Optional TITLE-PATTERN restricts search to matching entries."
   (let* ((search-limit (or limit elfeed-summary-db-gptel-search-limit))
          (url-request-method "POST")
          (url-request-extra-headers
           '(("Content-Type" . "application/json")))
          (request-data `((query . ,query)
                          (limit . ,search-limit)
-                         ,@(when filename-pattern
-                             `((filename_pattern . ,filename-pattern)))))
+                         ,@(when title-pattern
+                             `((title_pattern . ,title-pattern)))))
          (url-request-data (encode-coding-string
                             (json-encode request-data)
                             'utf-8))
@@ -69,50 +65,6 @@ Optional FILENAME-PATTERN restricts search to matching files."
                        results
                        "\n---\n")))))))
 
-(defun elfeed-summary-db-gptel--fulltext-search (query &optional limit filename-pattern)
-  "Perform fulltext search for QUERY.
-Returns up to LIMIT results (default from `elfeed-summary-db-gptel-search-limit').
-Optional FILENAME-PATTERN restricts search to matching files."
-  (let* ((search-limit (or limit elfeed-summary-db-gptel-search-limit))
-         (url-request-method "POST")
-         (url-request-extra-headers
-          '(("Content-Type" . "application/json")))
-         (request-data `((query . ,query)
-                         (limit . ,search-limit)
-                         ,@(when filename-pattern
-                             `((filename_pattern . ,filename-pattern)))))
-         (url-request-data (encode-coding-string
-                            (json-encode request-data)
-                            'utf-8))
-         (response-buffer (url-retrieve-synchronously
-                           (concat (elfeed-summary-db-server-url) "/api/search/fulltext")
-                           t nil 10)))
-    (if (not response-buffer)
-        (error "Failed to connect to org-db server")
-      (with-current-buffer response-buffer
-        (goto-char (point-min))
-        (re-search-forward "^$")
-        (let* ((json-object-type 'alist)
-               (json-array-type 'list)
-               (json-key-type 'symbol)
-               (response (json-read))
-               (results (alist-get 'results response)))
-          (kill-buffer)
-          (if (null results)
-              "No results found."
-            (mapconcat
-             (lambda (result)
-               (let ((filename (alist-get 'filename result))
-                     (title (alist-get 'title result))
-                     (snippet (alist-get 'snippet result))
-                     (rank (alist-get 'rank result)))
-                 (format "File: %s\nTitle: %s\nRank: %.3f\nSnippet:\n%s\n"
-                         filename
-                         (or title "(no title)")
-                         rank
-                         snippet)))
-             results
-             "\n---\n")))))))
 
 ;;;###autoload
 (defun elfeed-summary-db-gptel-register-tools ()
@@ -120,8 +72,8 @@ Optional FILENAME-PATTERN restricts search to matching files."
   (interactive)
   (gptel-make-tool
    :function #'elfeed-summary-db-gptel--semantic-search
-   :name "org_semantic_search"
-   :description "Search through org-mode files and linked documents (PDF, DOCX, PPTX, etc.) using semantic/AI similarity. Best for conceptual queries, finding related content, or when you don't know exact keywords. Returns relevant passages with context."
+   :name "elfeed_semantic_search"
+   :description "Search through elfeed entries using semantic/AI similarity. Best for conceptual queries, finding related content, or when you don't know exact keywords. Returns relevant passages with context."
    :args (list
           '(:name "query"
                   :type "string"
@@ -130,27 +82,9 @@ Optional FILENAME-PATTERN restricts search to matching files."
                   :type "number"
                   :description "Maximum number of results to return (default 5, max 20)"
                   :optional t)
-          '(:name "filename_pattern"
+          '(:name "title_pattern"
                   :type "string"
                   :description "SQL LIKE pattern to filter files (e.g., '%project%' for files containing 'project'). Use '%' as wildcard."
-                  :optional t))
-   :category "org-db")
-
-  (gptel-make-tool
-   :function #'elfeed-summary-db-gptel--fulltext-search
-   :name "org_fulltext_search"
-   :description "Search through org-mode files using exact keyword matching (FTS5). Best for finding specific terms, names, or exact phrases. Faster than semantic search but requires knowing the right keywords. Returns snippets with matched terms highlighted."
-   :args (list
-          '(:name "query"
-                  :type "string"
-                  :description "Search terms or phrase to find. Supports AND/OR/NOT operators and quoted phrases.")
-          '(:name "limit"
-                  :type "number"
-                  :description "Maximum number of results to return (default 5, max 20)"
-                  :optional t)
-          '(:name "filename_pattern"
-                  :type "string"
-                  :description "SQL LIKE pattern to filter files (e.g., '%2024%' for files in 2024). Use '%' as wildcard."
                   :optional t))
    :category "org-db")
 
@@ -164,7 +98,7 @@ Optional FILENAME-PATTERN restricts search to matching files."
   (setq gptel-tools
         (seq-remove (lambda (tool)
                       (member (plist-get tool :name)
-                              '("org_semantic_search" "org_fulltext_search")))
+                              '("elfeed_semantic_search")))
                     gptel-tools))
   (message "elfeed-summary-db search tools unregistered from gptel"))
 
