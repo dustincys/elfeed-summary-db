@@ -16,7 +16,7 @@ def temp_db(tmp_path):
 def test_database_initialization(temp_db):
     """Test that database initializes with correct schema."""
     # Check that entries table exists
-    cursor = temp_db.main_conn.cursor()
+    cursor = temp_db.semantic_conn.cursor()
     cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='entries'")
     assert cursor.fetchone() is not None
 

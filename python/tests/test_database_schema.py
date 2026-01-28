@@ -15,7 +15,7 @@ def temp_db(tmp_path):
 
 def test_all_core_tables_exist(temp_db):
     """Test that all core tables are created."""
-    cursor = temp_db.conn.cursor()
+    cursor = temp_db.semantic_conn.cursor()
 
     # List of all expected tables
     expected_tables = [
@@ -32,14 +32,14 @@ def test_all_core_tables_exist(temp_db):
 
 def test_foreign_keys_enabled(temp_db):
     """Test that foreign keys are enabled."""
-    cursor = temp_db.conn.cursor()
+    cursor = temp_db.semantic_conn.cursor()
     cursor.execute("PRAGMA foreign_keys")
     result = cursor.fetchone()
     assert result[0] == 1, "Foreign keys should be enabled"
 
 def test_entries_table_structure(temp_db):
     """Test entries table has correct columns."""
-    cursor = temp_db.conn.cursor()
+    cursor = temp_db.semantic_conn.cursor()
     cursor.execute("PRAGMA table_info(entries)")
     columns = {row[1] for row in cursor.fetchall()}
 
@@ -56,7 +56,7 @@ def test_entries_table_structure(temp_db):
 
 def test_chunks_and_embeddings_tables(temp_db):
     """Test that chunks and embeddings tables exist with proper structure."""
-    cursor = temp_db.conn.cursor()
+    cursor = temp_db.semantic_conn.cursor()
 
     # Check chunks table
     cursor.execute("PRAGMA table_info(chunks)")

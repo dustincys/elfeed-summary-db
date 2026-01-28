@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class Database:
-    """Database connections and operations across three databases."""
+    """Database connections and operations."""
 
     def __init__(self, semantic_path: Path):
         """Initialize three database connections and create schemas if needed.
