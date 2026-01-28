@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-echo "Setting up org-db v3 development environment..."
+echo "Setting up elfeed summary db development environment..."
 
 # Check Python version
 python3 --version | grep -q "Python 3.1[0-9]" || {
