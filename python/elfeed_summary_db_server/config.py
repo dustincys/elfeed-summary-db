@@ -42,5 +42,5 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # Ensure database directories exist
-settings.db_path.parent.mkdir(parents=True, exist_ok=True)
+settings.semantic_db_path.parent.mkdir(parents=True, exist_ok=True)
 settings.semantic_db_path.parent.mkdir(parents=True, exist_ok=True)

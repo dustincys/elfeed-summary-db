@@ -70,11 +70,9 @@ async def delete_entry(entry_id: str) -> Dict[str, Any]:
         db.semantic_conn.commit()
 
         return {
-            "status":
-            "deleted",
-            "entry_id":
-            "message":
-            f"Successfully deleted {entry_id} and all associated data from all tables"
+            "status": "deleted",
+            "entry_id": entry_id,
+            "message": f"Successfully deleted {entry_id} and all associated data from all tables",
         }
     except HTTPException:
         raise
