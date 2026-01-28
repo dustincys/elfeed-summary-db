@@ -1,27 +1,27 @@
 """Tests for search API endpoints."""
-import pytest
-from fastapi.testclient import TestClient
-from pathlib import Path
-import tempfile
+import hashlib
 import shutil
+import tempfile
+from pathlib import Path
 
-from org_db_server.main import app
-from org_db_server.services.database import Database
-from org_db_server.services.embeddings import get_embedding_service
-from org_db_server.services.chunking import chunk_text
-from org_db_server.config import settings
-from org_db_server.api import search, indexing
+import pytest
+from elfeed_summary_db_server.api import indexing, search
+from elfeed_summary_db_server.config import settings
+from elfeed_summary_db_server.main import app
+from elfeed_summary_db_server.services.chunking import chunk_text
+from elfeed_summary_db_server.services.database import Database
+from elfeed_summary_db_server.services.embeddings import get_embedding_service
+from fastapi.testclient import TestClient
+
 
 @pytest.fixture
 def temp_db():
     """Create temporary database for testing."""
     temp_dir = tempfile.mkdtemp()
-    db_path = Path(temp_dir) / "test.db"
     semantic_path = Path(temp_dir) / "semantic.db"
-    image_path = Path(temp_dir) / "image.db"
 
     # Create database instance
-    db = Database(db_path, semantic_path, image_path)
+    db = Database(semantic_path)
 
     # Override the global db instances in both modules
     old_search_db = search.db
@@ -45,9 +45,6 @@ def client(temp_db):
 
 def test_semantic_search(client, temp_db):
     """Test semantic search endpoint."""
-    # First, index a file with some content
-    file_id = temp_db.get_or_create_file_id("test.org", "abc123", 1000)
-    temp_db.main_conn.commit()
 
     # Create some test chunks with embeddings
     test_texts = [
@@ -55,6 +52,12 @@ def test_semantic_search(client, temp_db):
         "Database systems and SQL queries",
         "Web development with Python and FastAPI"
     ]
+    summary = " ".join(test_texts)
+    title = "test title"
+    entry_id = "test entry id"
+    content = ""
+
+    md5 = hashlib.md5("{0}{1}".format(summary, content).encode("utf-8")).hexdigest()
 
     chunks = []
     for i, text in enumerate(test_texts):
@@ -70,7 +73,15 @@ def test_semantic_search(client, temp_db):
     embeddings = embedding_service.generate_embeddings(test_texts)
 
     # Store chunks
-    temp_db.store_chunks(file_id, chunks, embeddings, embedding_service.model_name)
+
+
+    # def store_chunks(self, entry_id: str, title: str, summary: str,
+    #                  content: str, md5: str, chunks: List[Dict],
+    #                  embeddings: List[np.ndarray], model_name: str):
+
+    temp_db.store_chunks(entry_id, title, summary,
+                         content, md5, chunks,
+                         embeddings, embedding_service.model_name)
 
     # Now search for something related to AI
     response = client.post(
@@ -90,9 +101,12 @@ def test_semantic_search(client, temp_db):
     # First result should be most similar (AI/ML text)
     if len(data["results"]) > 0:
         first_result = data["results"][0]
+        assert "chunk_id" in first_result
         assert "chunk_text" in first_result
         assert "similarity_score" in first_result
-        assert "filename" in first_result
+        assert "title" in first_result
+        assert "chunk_type" in first_result
+        assert "entry_id" in first_result
         # Similarity scores can be low for short texts, just verify it's positive
         assert first_result["similarity_score"] > 0
 

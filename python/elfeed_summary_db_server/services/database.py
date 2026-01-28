@@ -102,7 +102,8 @@ class Database:
         cursor.execute("DELETE FROM entries WHERE rowid = ?", (entry_id, ))
 
         cursor.execute(
-            """INSERT INTO entries (entry_id, title, summary, content, md5, index_at) VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO entries (entry_id, title, summary,
+            content, md5, indexed_at) VALUES (?, ?, ?, ?, ?, ?)""",
             (entry_id, title, summary, content, md5,
              datetime.now().isoformat()))
 
