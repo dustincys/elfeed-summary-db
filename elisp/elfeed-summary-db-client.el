@@ -120,24 +120,23 @@ Wraps processing in error handling to prevent queue stalls."
                 :as #'json-read
                 :timeout elfeed-summary-db-index-timeout  ; Configurable timeout
                 :then (lambda (response)
-                        (message "Indexed %s, status %s" (alist-get 'entry_id response) (alist-get 'statue response))
+                        (message "Indexed %s, status %s" (alist-get 'entry_id response) (alist-get 'status response))
                         ;; Process next file in queue after this one completes
                         (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue))
                 :else (lambda (error)
                         ;; Track failed files
-                        (push entry_id elfeed-summary-db-index-failed-entries)
+                        (push entry elfeed-summary-db-index-failed-entries)
                         ;; Check if it's a timeout
                         (if (and (listp error) (eq (car error) 28))
                             (message "Timeout indexing %s (exceeded %d seconds)"
                                      title
                                      elfeed-summary-db-index-timeout)
-                          (message "Error indexing %s: %s"
-                                   (file-name-nondirectory filename) error))
+                          (message "Error indexing %s: %s" title error))
                         ;; Continue with next file even on error
                         (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue)))))))
     ;; Catch any unexpected errors and continue queue processing
     (error
-     (message "Unexpected error processing %s: %S - continuing queue" entry_id err)
+     (message "Unexpected error processing %s: %S - continuing queue" (title (elfeed-entry-title entry)) err)
      (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue))))
 
 ;;;###autoload

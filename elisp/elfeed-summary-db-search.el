@@ -13,7 +13,8 @@
 ;;; Code:
 
 (require 'json)
-(require 'org)
+(require 'elfeed)
+(require 'url)
 
 ;; Declare url-request variables as special for lexical binding compatibility
 (defvar url-request-method)
