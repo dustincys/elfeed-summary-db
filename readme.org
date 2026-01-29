@@ -12,7 +12,7 @@ FastAPI backend provides storage, embeddings, and vector search.
 
 - *Semantic Search* :: Find org content by meaning using embeddings
 - *gptel Integration* :: Expose search tools to LLMs for AI-powered org file exploration
-- *Transient UI* :: Easy-to-use menu system for all commands (=H-v= or =M-x org-db=)
+- *Transient UI* :: Easy-to-use menu system for all commands (=H-v= or =M-x elfeed-summary-db=)
 - *Web Interface* :: Browse statistics and documentation via browser
 
 
