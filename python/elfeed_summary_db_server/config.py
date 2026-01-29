@@ -10,7 +10,7 @@ class Settings(BaseSettings):
 
     # Server
     host: str = "127.0.0.1"
-    port: int = 8765
+    port: int = 8875
 
     # Databases - separated for performance and size management
     # Semantic search database: text chunks and embeddings (with libsql vector search)

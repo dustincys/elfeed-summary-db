@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Benchmark semantic search performance."""
 
-import requests
-import time
 import json
+import time
 
-BASE_URL = "http://127.0.0.1:8765"
+import requests
+
+BASE_URL = "http://127.0.0.1:8875"
 
 def benchmark_query(query: str, limit: int = 20, runs: int = 5):
     """Run a query multiple times and report timing."""

@@ -10,13 +10,13 @@
   (let* ((url-request-method "POST")
          (url-request-extra-headers '(("Content-Type" . "application/json")))
          (request-body `((query . ,query)
-                        (limit . 20)
-                        (rerank . :json-false)
-                        (rerank_candidates . 50)))
+                         (limit . 20)
+                         (rerank . :json-false)
+                         (rerank_candidates . 50)))
          (url-request-data (encode-coding-string
                             (json-encode request-body)
                             'utf-8))
-         (url "http://127.0.0.1:8765/api/search/semantic"))
+         (url "http://127.0.0.1:8875/api/search/semantic"))
 
     (message "Sending request to: %s" url)
     (message "Request body: %s" url-request-data)
@@ -32,8 +32,8 @@
                 (with-current-buffer buffer
                   (message "Buffer contents (first 500 chars):")
                   (message "%s" (buffer-substring-no-properties
-                                (point-min)
-                                (min (+ (point-min) 500) (point-max))))
+                                 (point-min)
+                                 (min (+ (point-min) 500) (point-max))))
                   (goto-char (point-min))
                   (if (re-search-forward "^$" nil t)
                       (progn

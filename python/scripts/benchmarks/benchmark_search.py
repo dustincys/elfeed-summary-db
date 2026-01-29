@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Benchmark semantic search performance."""
 
-import time
-import requests
 import json
 import sys
+import time
 from statistics import mean, median, stdev
+
+import requests
+
 
 def benchmark_search(query: str, limit: int = 10, iterations: int = 5):
     """Benchmark a semantic search query."""
-    url = "http://127.0.0.1:8765/api/search/semantic"
+    url = "http://127.0.0.1:8875/api/search/semantic"
     headers = {"Content-Type": "application/json"}
     data = {
         "query": query,
@@ -52,7 +54,7 @@ def benchmark_search(query: str, limit: int = 10, iterations: int = 5):
 def main():
     # Check server is running
     try:
-        response = requests.get("http://127.0.0.1:8765/health", timeout=5)
+        response = requests.get("http://127.0.0.1:8875/health", timeout=5)
         if response.status_code != 200:
             print("ERROR: Server is not responding correctly")
             sys.exit(1)
@@ -62,7 +64,7 @@ def main():
 
     # Get database stats
     try:
-        stats = requests.get("http://127.0.0.1:8765/api/stats/", timeout=5).json()
+        stats = requests.get("http://127.0.0.1:8875/api/stats/", timeout=5).json()
         print("\nDatabase Statistics:")
         print(f"  Files: {stats['files_count']}")
         print(f"  Chunks: {stats['chunks_count']}")

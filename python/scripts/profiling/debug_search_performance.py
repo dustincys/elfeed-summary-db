@@ -6,18 +6,19 @@ This tool helps diagnose why database searches are slow or failing.
 Run this before and after optimizations to measure improvements.
 """
 
-import time
-import libsql
-import requests
-import sys
-import psutil
 import os
+import sys
+import time
 from pathlib import Path
 from statistics import mean, median
 
+import libsql
+import psutil
+import requests
+
 # Database path
 DB_PATH = Path.home() / "Dropbox/emacs/cache/org-db-v3/org-db-v3.db"
-SERVER_URL = "http://127.0.0.1:8765"
+SERVER_URL = "http://127.0.0.1:8875"
 
 def format_bytes(bytes):
     """Format bytes as human-readable string."""
@@ -107,7 +108,7 @@ def check_database_health():
             print(f"✅ sqlite_stat1 has {stat_count[0]} entries (ANALYZE has been run)")
         else:
             print("⚠️  WARNING: No optimizer statistics found!")
-            print("   Run: curl -X POST http://127.0.0.1:8765/api/optimize")
+            print("   Run: curl -X POST http://127.0.0.1:8875/api/optimize")
 
         conn.close()
         return True
@@ -307,7 +308,7 @@ def main():
     if query_status == "TIMEOUT" or query_status == "SLOW":
         print("  🔴 CRITICAL: Queries are too slow!")
         print("     1. Run database optimization:")
-        print("        curl -X POST http://127.0.0.1:8765/api/optimize")
+        print("        curl -X POST http://127.0.0.1:8875/api/optimize")
         print("     2. Consider reducing database size")
         print("     3. Check disk I/O performance")
         print("     4. Review recent code changes that removed caching")
