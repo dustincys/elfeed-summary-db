@@ -163,7 +163,7 @@ Retrieve up to LIMIT results (default `elfeed-summary-db-search-default-limit').
                           nil t)))
           (when selection
             (let* ((metadata (gethash selection metadata-table))
-                   (entry_id (plist-get metadata :entry_id))
+                   (entry_id (read (plist-get metadata :entry_id)))
                    (entry (elfeed-db-get-entry entry_id)))
               (when entry
                 (elfeed-show-entry entry)
