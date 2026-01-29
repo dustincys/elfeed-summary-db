@@ -14,7 +14,7 @@
   (let* ((entry-id (elfeed-entry-id entry))
          (title (elfeed-entry-title entry))
          (summary (elfeed-meta entry :summary))
-         (content (elfeed-entry-content entry))
+         (content (elfeed-deref (elfeed-entry-content entry)))
          (md5str (md5 (format "%S %S %S" title summary content)))
          (data `(("entry_id" . ,(prin1-to-string entry-id))
                  ("title" . ,title)

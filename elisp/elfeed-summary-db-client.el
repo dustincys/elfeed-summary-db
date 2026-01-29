@@ -48,14 +48,13 @@ Fetches the entry from the database and posts it to the vector server."
   (if (not entry)
       (message "Error: Entry ID %s not found in Elfeed DB" entry-id)
 
-    (let ((summary (elfeed-meta entry :summary))
-          (title (elfeed-entry-title entry))
-          (json-data (elfeed-summary-db-parse-entry-to-json entry)))
+    (let* ((summary (elfeed-meta entry :summary))
+           (title (elfeed-entry-title entry))
+           (json-data (elfeed-summary-db-parse-entry-to-json entry)))
 
       ;; Logic Check: If there is NO summary, we stop (or log it)
       (if (not summary)
           (message "Skipping: '%s' has no summary to vectorize." title)
-
         ;; The 'plz' call is inherently async
         (plz 'post (concat (elfeed-summary-db-server-url) "/api/entry")
           :headers '(("Content-Type" . "application/json"))

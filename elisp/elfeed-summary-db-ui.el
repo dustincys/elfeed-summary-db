@@ -82,8 +82,8 @@ Returns plist with :filename_pattern and/or :keyword."
      :description "Index current entry")
     ("U" "Update all entries" elfeed-summary-db-index-all-entries
      :description "Index all entries")
-    ("r" "Reindex database" elfeed-summary-db-reindex-all-entries
-     :description "Reindex all entries")]
+    ("r" "Reindex database" elfeed-summary-db-reindex-database
+     :description "Reindex database")]
    ["Server"
     ("S" "Server status" elfeed-summary-db-server-status
      :description "Check server status")
@@ -112,24 +112,25 @@ Returns plist with :filename_pattern and/or :keyword."
   (interactive)
   (condition-case err
       (let ((entry (my-feed/get-current-entry)))
+        (message "begin Indexing %s..." (elfeed-entry-title entry))
         (elfeed-summary-db-index-entry-async entry)
-        (message "Indexing %s..." entry))
+        (message "Indexing %s..." (elfeed-entry-title entry)))
     (error
      (message "Cannot index entry: %s" (error-message-string err)))))
 
 ;;;###autoload
 (defun elfeed-summary-db-index-all-entries ()
-  "Index all entries in the current Elfeed search buffer."
+  "Index all entries in the Elfeed database."
   (interactive)
-  (unless (derived-mode-p 'elfeed-search-mode)
-    (user-error "Not in an Elfeed search buffer"))
 
   (let ((count 0))
-    (elfeed-search-map
-     (lambda (entry)
+    (maphash
+     (lambda (_id entry)
        (setq count (1+ count))
-       (elfeed-summary-db-index-entry-async entry)))
+       (elfeed-summary-db-index-entry-async entry))
+     elfeed-db-entries)
     (message "Indexing %d entries..." count)))
+
 
 ;;;###autoload
 (defun elfeed-summary-db-server-status ()
