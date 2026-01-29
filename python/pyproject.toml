@@ -1,7 +1,7 @@
 [project]
-name = "elfeed-summary-server"
+name = "elfeed_summary_db_server"
 version = "0.1.0"
-description = "FastAPI server for elfeed-db with semantic search, image search, and full-text search"
+description = "FastAPI server for elfeed-db with semantic search"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [

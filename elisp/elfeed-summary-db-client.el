@@ -63,9 +63,9 @@ Fetches the entry from the database and posts it to the vector server."
           :as #'json-read
           :timeout 120
           :then (lambda (response)
-                  (let ((entry_id_str (alist-get 'entry_id response))
+                  (let ((entry-id_str (alist-get 'entry-id response))
                         (status (alist-get 'status response)))
-                    (message "Successfully indexed: %s (Status: %s)" entry_id_str status)))
+                    (message "Successfully indexed: %s (Status: %s)" entry-id_str status)))
           :else (lambda (err)
                   (let ((err-msg (cl-struct-slot-value 'plz-error 'message err)))
                     (message "Failed to index '%s'" err-msg))))))))
@@ -120,7 +120,7 @@ Wraps processing in error handling to prevent queue stalls."
                 :as #'json-read
                 :timeout elfeed-summary-db-index-timeout  ; Configurable timeout
                 :then (lambda (response)
-                        (message "Indexed %s, status %s" (alist-get 'entry_id response) (alist-get 'status response))
+                        (message "Indexed %s, status %s" (alist-get 'entry-id response) (alist-get 'status response))
                         ;; Process next file in queue after this one completes
                         (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue))
                 :else (lambda (error)
@@ -168,7 +168,7 @@ Skips entries with no summary."
         (setq elfeed-summary-db-index-queue all-entries
               elfeed-summary-db-index-total count
               elfeed-summary-db-index-processed 0
-              elfeed-summary-db-index-failed-files nil) ; Reset failed list
+              elfeed-summary-db-index-failed-entries nil) ; Reset failed list
 
         ;; 4. Start processing
         (setq elfeed-summary-db-index-timer t) ; Marker that indexing is active
@@ -187,91 +187,93 @@ Skips entries with no summary."
   (interactive)
   (elfeed-summary-db-ensure-server)
 
-  (plz 'get (concat (elfeed-summary-db-server-url) "/api/files")
+  (plz 'get (concat (elfeed-summary-db-server-url) "/api/entries")
     :as #'json-read
     :then (lambda (response)
-            (let* ((entries (alist-get 'entry_id response))
+            (let* ((entry-ids (alist-get 'entry-id response))
                    (count (length entries))
-                   (missing-entries nil)
-                   (existing-entries nil)
-                   (entries_with_no_summary nil))
+                   (missing-entry-ids nil)
+                   (existing-entry-ids nil)
+                   (entry-ids-with-no-summary nil))
 
               ;; Classify entries as existing, missing, or no summary
               (dotimes (i count)
-                (let ((entry_id (elt entries i)))
+                (let ((entry-id (read (elt entry-ids i))))
                   (cond
-                   ((not (summary (elfeed-meta (elfeed-db-get-entry entry_id) :summary)))
-                    (push entry_id entries_with_no_summary))
-                   ((elfeed-db-get-entry entry_id)
-                    (push entry_id existing-entries))
+                   ((not (summary (elfeed-meta (elfeed-db-get-entry entry-id) :summary)))
+                    (push entry-id entry-ids-with-no-summary))
+                   ((elfeed-db-get-entry entry-id)
+                    (push entry-id existing-entry-ids))
                    (t
-                    (push entry_id missing-entries)))))
+                    (push entry-id missing-entry-ids)))))
 
               (if (zerop count)
                   (message "No entries found in database")
 
                 ;; Show summary and confirm
                 (let ((msg (format "Reindex %d existing entr%s%s%s? "
-                                   (length existing-entries)
-                                   (if (= (length existing-entries) 1) "y" "ies")
-                                   (if missing-entries
-                                       (format ", remove %d missing file%s"
-                                               (length missing-files)
-                                               (if (= (length missing-files) 1) "" "s"))
+                                   (length existing-entry-ids)
+                                   (if (= (length existing-entry-ids) 1) "y" "ies")
+                                   (if missing-entry-ids
+                                       (format ", remove %d missing entr%s"
+                                               (length missing-entry-ids)
+                                               (if (= (length missing-entry-ids) 1) "y" "ies"))
                                      "")
-                                   (if entries_with_no_summary
+                                   (if entry-ids-with-no-summary
                                        (format ", skip %d entr%s"
-                                               (length entries_with_no_summary)
-                                               (if (= (length entries_with_no_summary) 1) "y" "ies"))
+                                               (length entry-ids-with-no-summary)
+                                               (if (= (length entry-ids-with-no-summary) 1) "y" "ies"))
                                      ""))))
                   (when (yes-or-no-p msg)
                     ;; Delete missing files from database immediately
-                    (when missing-entries
+                    (when missing-entry-ids
                       (message "Removing %d missing entr%s from database..."
-                               (length missing-entries)
-                               (if (= (length missing-entries) 1) "y" "ies"))
-                      (dolist (entry_id missing-entries)
-                        (elfeed-summary-db-delete-entry-async entry_id)))
+                               (length missing-entry-ids)
+                               (if (= (length missing-entry-ids) 1) "y" "ies"))
+                      (dolist (entry-id missing-entry-ids)
+                        (elfeed-summary-db-delete-entry-async entry-id)))
 
                     ;; Remove remote files from database
-                    (when entries_with_no_summary
+                    (when entry-ids-with-no-summary
                       (message "Removing %d remote entr%s from database..."
-                               (length entries_with_no_summary)
-                               (if (= (length entries_with_no_summary) 1) "y" "ies"))
-                      (dolist (filename entries_with_no_summary)
-                        (elfeed-summary-db-delete-entry-async filename)))
+                               (length entry-ids-with-no-summary)
+                               (if (= (length entry-ids-with-no-summary) 1) "y" "ies"))
+                      (dolist (entry-id entry-ids-with-no-summary)
+                        (elfeed-summary-db-delete-entry-async entry-id)))
 
                     ;; Reindex existing entries using non-blocking queue
-                    (when existing-entries
+                    (when existing-entry-ids
                       ;; Check if indexing is already in progress
                       (when elfeed-summary-db-index-timer
                         (message "Indexing already in progress, please wait or cancel first")
                         (user-error "Indexing already in progress"))
 
                       ;; Set up the queue
-                      (setq elfeed-summary-db-index-queue existing-entries
-                            elfeed-summary-db-index-total (length existing-entries)
+                      (setq elfeed-summary-db-index-queue existing-entry-ids
+                            elfeed-summary-db-index-total (length existing-entry-ids)
                             elfeed-summary-db-index-processed 0
-                            elfeed-summary-db-index-failed-files nil)  ; Reset failed files list
+                            elfeed-summary-db-index-failed-entries nil)  ; Reset failed files list
 
                       ;; Start processing first file (continuation handled in callback)
                       (setq elfeed-summary-db-index-timer t)  ; Marker that indexing is active
                       (run-with-timer 0 nil #'elfeed-summary-db-process-index-queue)
 
                       (message "Starting sequential reindex of %d entr%s..."
-                               (length existing-entries)
-                               (if (= (length existing-entries) 1) "y" "ies"))))))))
+                               (length existing-entry-ids)
+                               (if (= (length existing-entry-ids) 1) "y" "ies"))))))))
     :else (lambda (error)
             (message "Error fetching entry list: %s" (plz-error-message error)))))
 
-(defun elfeed-summary-db-delete-entry-async (entry_id)
+(defun elfeed-summary-db-delete-entry-async (entry-id)
   "Delete ENTRY_ID from the database asynchronously."
-  (plz 'delete (concat (elfeed-summary-db-server-url) "/api/entry?entry_id=" (url-hexify-string entry_id))
-    :as #'json-read
-    :then (lambda (response)
-            (message "Removed %s from database" entry_id))
-    :else (lambda (error)
-            (message "Error removing %s: %s" entry_id (plz-error-message error)))))
+  (let ((entry-id (prin1-to-string entry-id)))
+    (plz 'delete (concat (elfeed-summary-db-server-url) "/api/entry?entry-id=" (url-hexify-string entry-id))
+      :as #'json-read
+      :then (lambda (response)
+              (message "Removed %s from database" entry-id))
+      :else (lambda (error)
+              (message "Error removing %s: %s" entry-id (plz-error-message error)))))
+  )
 
 ;;;###autoload
 (defun elfeed-summary-db-cancel-indexing ()
@@ -318,12 +320,12 @@ If indexing has stalled, this will restart processing the remaining queue."
   "Show the status of the current indexing operation."
   (interactive)
   (if elfeed-summary-db-index-timer
-      (message "Indexing in progress: %d/%d files processed, %d remaining in queue%s"
+      (message "Indexing in progress: %d/%d entries processed, %d remaining in queue%s"
                elfeed-summary-db-index-processed
                elfeed-summary-db-index-total
                (length elfeed-summary-db-index-queue)
-               (if elfeed-summary-db-index-failed-files
-                   (format ", %d failed" (length elfeed-summary-db-index-failed-files))
+               (if elfeed-summary-db-index-failed-entries
+                   (format ", %d failed" (length elfeed-summary-db-index-failed-entries))
                  ""))
     (message "No indexing operation in progress")))
 
@@ -334,8 +336,8 @@ If indexing has stalled, this will restart processing the remaining queue."
   (if elfeed-summary-db-index-failed-entries
       (with-output-to-temp-buffer "*elfeed-summary-db-failed-entries*"
         (princ (format "Failed to index %d entry(entries):\n\n" (length elfeed-summary-db-index-failed-entries)))
-        (dolist (file elfeed-summary-db-index-failed-entries)
-          (princ (format "  %s\n" file))))
+        (dolist (entry elfeed-summary-db-index-failed-entries)
+          (princ (format "  %s\n" (elfeed-entry-title entry)))))
     (message "No failed entries in last indexing operation")))
 
 ;;;###autoload

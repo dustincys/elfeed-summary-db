@@ -78,11 +78,11 @@ Returns plist with :filename_pattern and/or :keyword."
    ]
   ["Management"
    ["Indexing"
-    ("u" "Update current entry" elfeed-summary-db-update-current-entry
+    ("u" "Update current entry" elfeed-summary-db-index-current-entry
      :description "Index current entry")
-    ("U" "Update all entries" elfeed-summary-db-index-elfeed
+    ("U" "Update all entries" elfeed-summary-db-index-all-entries
      :description "Index all entries")
-    ("r" "Reindex database" elfeed-summary-db-reindex-database
+    ("r" "Reindex database" elfeed-summary-db-reindex-all-entries
      :description "Reindex all entries")]
    ["Server"
     ("S" "Server status" elfeed-summary-db-server-status
@@ -107,30 +107,29 @@ Returns plist with :filename_pattern and/or :keyword."
 
 
 ;;;###autoload
-(defun elfeed-summary-db-update-current-entry ()
-  "Manually update the current entry."
+(defun elfeed-summary-db-index-current-entry ()
+  "Manually index the current entry."
   (interactive)
-  (if (buffer-file-name)
-      (progn
-        (elfeed-summary-db-index-entry-async (buffer-file-name))
-        (message "Indexing %s..." (buffer-file-name)))
-    (message "No file associated with current buffer")))
+  (condition-case err
+      (let ((entry (my-feed/get-current-entry)))
+        (elfeed-summary-db-index-entry-async entry)
+        (message "Indexing %s..." entry))
+    (error
+     (message "Cannot index entry: %s" (error-message-string err)))))
 
 ;;;###autoload
-(defun elfeed-summary-db-update-all-buffers ()
-  "Update all open org buffers."
+(defun elfeed-summary-db-index-all-entries ()
+  "Index all entries in the current Elfeed search buffer."
   (interactive)
+  (unless (derived-mode-p 'elfeed-search-mode)
+    (user-error "Not in an Elfeed search buffer"))
+
   (let ((count 0))
-    (dolist (buffer (buffer-list))
-      (with-current-buffer buffer
-        (when (and (buffer-file-name)
-                   (or (string-suffix-p ".org" (buffer-file-name))
-                       (string-suffix-p ".org_archive" (buffer-file-name))))
-          (elfeed-summary-db-index-entry-async (buffer-file-name))
-          (setq count (1+ count)))))
-    (message "Sent %d org file%s to server for indexing"
-             count
-             (if (= count 1) "" "s"))))
+    (elfeed-search-map
+     (lambda (entry)
+       (setq count (1+ count))
+       (elfeed-summary-db-index-entry-async entry)))
+    (message "Indexing %d entries..." count)))
 
 ;;;###autoload
 (defun elfeed-summary-db-server-status ()
