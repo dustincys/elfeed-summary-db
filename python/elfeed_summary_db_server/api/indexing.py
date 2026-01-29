@@ -66,7 +66,7 @@ async def delete_entry(entry_id: str) -> Dict[str, Any]:
     try:
         # Delete from main database (metadata)
         cursor = db.semantic_conn.cursor()
-        cursor.execute("DELETE FROM entries WHERE rowid = ?", (entry_id, ))
+        cursor.execute("DELETE FROM entries WHERE entry_id = ?", (entry_id, ))
         db.semantic_conn.commit()
 
         return {
