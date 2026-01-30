@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Profile semantic search to find bottlenecks."""
 
-import time
 import sys
+import time
+
 import numpy as np
-from org_db_server.services.embeddings import get_embedding_service
-from org_db_server.services.database import Database
-from org_db_server.config import settings
+from elfeed_summary_db_server.config import settings
+from elfeed_summary_db_server.services.database import Database
+from elfeed_summary_db_server.services.embeddings import get_embedding_service
+
 
 def profile_search(query: str = "test", limit: int = 10):
     """Profile each step of semantic search."""

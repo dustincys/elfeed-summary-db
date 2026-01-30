@@ -1,14 +1,15 @@
-;;; elfeed-summary-db-gptel-tools.el --- gptel tools for org-db search -*- lexical-binding: t; -*-
+;;; elfeed-summary-db-gptel-tools.el --- gptel tools for elfeed-summary-db search -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;; Provides gptel tools that allow LLMs to search your org files using
-;; semantic and fulltext search capabilities of elfeed-summary-db.
+;; Provides gptel tools that allow LLMs to search your elfeed entries using
+;; semantic search capabilities of elfeed-summary-db.
 
 ;;; Code:
 
 (require 'gptel)
 (require 'elfeed-summary-db-search)
 (require 'json)
+(require 'elfeed)
 
 (defcustom elfeed-summary-db-gptel-search-limit 5
   "Default number of search results to return to LLM tools."
@@ -49,7 +50,7 @@ Optional TITLE-PATTERN restricts search to matching entries."
                            (concat (elfeed-summary-db-server-url) "/api/search/semantic")
                            t nil 10)))
     (if (not response-buffer)
-        (error "Failed to connect to org-db server")
+        (error "Failed to connect to elfeed-summary-db server")
       (with-current-buffer response-buffer
         (goto-char (point-min))
         (re-search-forward "^$")
@@ -84,9 +85,9 @@ Optional TITLE-PATTERN restricts search to matching entries."
                   :optional t)
           '(:name "title_pattern"
                   :type "string"
-                  :description "SQL LIKE pattern to filter files (e.g., '%project%' for files containing 'project'). Use '%' as wildcard."
+                  :description "SQL LIKE pattern to filter entries (e.g., '%project%' for files containing 'project'). Use '%' as wildcard."
                   :optional t))
-   :category "org-db")
+   :category "elfeed-summary-db")
 
   (message "elfeed-summary-db search tools registered with gptel"))
 

@@ -20,4 +20,4 @@ cd python
 uv sync
 
 echo "Setup complete!"
-echo "To start the server: cd python && uv run uvicorn org_db_server.main:app --reload --port 8875"
+echo "To start the server: cd python && uv run uvicorn elfeed_summary_db_server.main:app --reload --port 8875"

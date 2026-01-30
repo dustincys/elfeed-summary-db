@@ -254,7 +254,7 @@ def check_system_resources():
     for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
         try:
             cmdline = ' '.join(proc.info['cmdline'] or [])
-            if 'uvicorn' in cmdline and 'org_db_server' in cmdline:
+            if 'uvicorn' in cmdline and 'elfeed_summary_db_server' in cmdline:
                 found = True
                 print(f"\n  Found server process (PID {proc.info['pid']}):")
                 proc_info = proc.as_dict(attrs=['memory_info', 'cpu_percent', 'num_threads'])
