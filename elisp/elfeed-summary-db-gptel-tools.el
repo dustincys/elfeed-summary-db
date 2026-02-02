@@ -24,8 +24,8 @@
          (title (alist-get 'title result))
          (chunk-type (alist-get 'chunk_type result))
          (entry-id (alist-get 'entry_id result))
-         (summary (elfeed-meta (elfeed-db-get-entry entry-id) :summary)))
-    (format "Title %s%s\nEntry: %s\nRelevance: %.3f\nSummary:\n%s\n"
+         (summary (elfeed-meta (elfeed-db-get-entry (read entry-id)) :summary)))
+    (format "Title %s\nEntry: %s\nRelevance: %.3f\nSummary:\n%s\n"
             title
             entry-id
             similarity
