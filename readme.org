@@ -10,8 +10,8 @@ FastAPI backend provides storage, embeddings, and vector search.
 
 * Features
 
-- *Semantic Search* :: Find org content by meaning using embeddings
-- *gptel Integration* :: Expose search tools to LLMs for AI-powered org file exploration
+- *Semantic Search* :: Find elfeed summary content by meaning using embeddings
+- *gptel Integration* :: Expose search tools to LLMs for AI-powered elfeed entry exploration
 - *Transient UI* :: Easy-to-use menu system for all commands (=H-v= or =M-x elfeed-summary-db=)
 - *Web Interface* :: Browse statistics and documentation via browser
 
@@ -36,4 +36,3 @@ This installs all dependencies including:
 - sentence-transformers (text embeddings)
 - CLIP (image embeddings)
 - SQLite (database)
-
