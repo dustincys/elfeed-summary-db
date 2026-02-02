@@ -25,11 +25,34 @@
          (chunk-type (alist-get 'chunk_type result))
          (entry-id (alist-get 'entry_id result))
          (summary (elfeed-meta (elfeed-db-get-entry (read entry-id)) :summary)))
-    (format "Title %s\nEntry: %s\nRelevance: %.3f\nSummary:\n%s\n"
+    (format "Title %s\n[[ELFEED:%s]]\nRelevance: %.3f\nSummary:\n%s\n"
             title
             entry-id
             similarity
             summary)))
+
+(defun elfeed-summary-db-gptel--render-buttons (start end)
+  "Replace [[ELFEED:...]] markers with clickable Elfeed buttons.
+START and END delimit the LLM response region."
+  (save-excursion
+    (goto-char start)
+    (while (re-search-forward "\\[\\[ELFEED:\\(.*?\\)\\]\\]" end t)
+      (let* ((raw (match-string 1))
+             (entry-id (ignore-errors (read raw)))
+             (entry (and entry-id (elfeed-db-get-entry entry-id)))
+             (btn-start (match-beginning 0))
+             (btn-end (match-end 0)))
+        (when entry
+          (delete-region btn-start btn-end)
+          (insert-text-button
+           "🔗 Open in Elfeed"
+           'follow-link t
+           'help-echo (elfeed-entry-title entry)
+           'action (lambda (_)
+                     (elfeed-show-entry entry)
+                     (message "Opened: %s"
+                              (elfeed-entry-title entry)))))))))
+
 
 (defun elfeed-summary-db-gptel--semantic-search (query &optional limit title-pattern)
   "Perform semantic search for QUERY.
