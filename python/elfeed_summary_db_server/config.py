@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     ) / "elfeed-summary-db" / "elfeed-summary-db-semantic.db"
 
     # Embedding models
-    default_embedding_model: str = "all-MiniLM-L6-v2"
+    default_embedding_model: str = "bge-m3"
     default_clip_model: str = "clip-ViT-B-32"
 
     # Indexing for org files - using aggressive chunking to reduce DB size

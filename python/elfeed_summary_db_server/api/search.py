@@ -49,7 +49,7 @@ async def semantic_search(request: SemanticSearchRequest):
     try:
         # Get embedding service
         t1 = time.perf_counter()
-        model_name = request.model or "all-MiniLM-L6-v2"
+        model_name = request.model or "bge-m3"
         embedding_service = get_embedding_service(model_name)
         logger.debug(
             f"Get embedding service: {(time.perf_counter()-t1)*1000:.1f}ms")

@@ -8,7 +8,7 @@ from sentence_transformers import SentenceTransformer
 class EmbeddingService:
     """Service for generating text embeddings."""
 
-    def __init__(self, model_name: str = "all-MiniLM-L6-v2"):
+    def __init__(self, model_name: str = "bge-m3"):
         """Initialize with a specific model."""
         self.model_name = model_name
         self.model = SentenceTransformer("/home/dustin/llm/" + model_name)
@@ -38,7 +38,7 @@ class EmbeddingService:
 # Global embedding service instance (lazy loaded)
 _embedding_service = None
 
-def get_embedding_service(model_name: str = "all-MiniLM-L6-v2") -> EmbeddingService:
+def get_embedding_service(model_name: str = "bge-m3") -> EmbeddingService:
     """Get or create the global embedding service."""
     global _embedding_service
     if _embedding_service is None or _embedding_service.model_name != model_name:
