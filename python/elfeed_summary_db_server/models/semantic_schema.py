@@ -30,11 +30,12 @@ CREATE INDEX IF NOT EXISTS idx_chunks_title ON chunks(title);
 
 -- Embeddings table with libsql vector search
 -- Note: F32_BLOB(384) is required for libsql vector search (all-MiniLM-L6-v2 model)
+-- Note: F32_BLOB(1024) is required for libsql vector search (bge-m3 model)
 CREATE TABLE IF NOT EXISTS embeddings (
     rowid INTEGER PRIMARY KEY,
     chunk_id INTEGER NOT NULL,
     embedding_model TEXT NOT NULL,
-    embedding_vector F32_BLOB(384) NOT NULL,
+    embedding_vector F32_BLOB(1024) NOT NULL,
     embedding_dim INTEGER NOT NULL,
     created_at TEXT,
     FOREIGN KEY(chunk_id) REFERENCES chunks(rowid) ON DELETE CASCADE

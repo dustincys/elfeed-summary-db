@@ -7,7 +7,7 @@ from elfeed_summary_db_server.services.embeddings import EmbeddingService
 @pytest.fixture
 def embedding_service():
     """Create embedding service with small model for testing."""
-    return EmbeddingService(model_name="all-MiniLM-L6-v2")
+    return EmbeddingService(model_name="bge-m3")
 
 def test_generate_embedding(embedding_service):
     """Test generating a single embedding."""
@@ -16,7 +16,8 @@ def test_generate_embedding(embedding_service):
     embedding = embedding_service.generate_embedding(text)
 
     assert isinstance(embedding, np.ndarray)
-    assert embedding.shape[0] == 384  # all-MiniLM-L6-v2 dimension
+    # assert embedding.shape[0] == 384  #
+    assert embedding.shape[0] == 1024  # bge-m3 dimension
     assert np.isfinite(embedding).all()
 
 def test_generate_embeddings_batch(embedding_service):
@@ -26,4 +27,4 @@ def test_generate_embeddings_batch(embedding_service):
     embeddings = embedding_service.generate_embeddings(texts)
 
     assert len(embeddings) == 3
-    assert all(emb.shape[0] == 384 for emb in embeddings)
+    assert all(emb.shape[0] == 1024 for emb in embeddings)

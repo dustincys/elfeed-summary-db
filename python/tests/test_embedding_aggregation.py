@@ -22,9 +22,9 @@ def demonstrate_aggregation():
     print("="*70)
 
     # Load model (same as your server uses)
-    print("\nLoading model: all-MiniLM-L6-v2...")
-    model = SentenceTransformer("/home/dustin/llm/" + 'all-MiniLM-L6-v2')
-    print("✓ Model loaded (384 dimensions)")
+    print("\nLoading model: bge-m3...")
+    model = SentenceTransformer("/home/dustin/llm/" + 'bge-m3')
+    print("✓ Model loaded (1024 dimensions)")
 
     # Test document chunks
     chunks = [
