@@ -106,7 +106,7 @@ async def index_entry(request: IndexEntryRequest):
             # Chunk the full summary with proper line tracking
             # Use configurable method and size (default: fixed chunks to reduce bloat)
             all_chunks = chunk_text(
-                request.summary + request.content,
+                request.title + request.summary + request.content,
                 method=settings.elfeed_chunk_method,
                 chunk_size=settings.elfeed_chunk_size,
                 chunk_overlap=settings.elfeed_chunk_overlap)
