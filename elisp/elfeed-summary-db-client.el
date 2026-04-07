@@ -62,7 +62,7 @@ Fetches the entry from the database and posts it to the vector server."
           :as #'json-read
           :timeout 120
           :then (lambda (response)
-                  (let ((entry-id_str (alist-get 'entry-id response))
+                  (let ((entry-id_str (alist-get 'entry_id response))
                         (status (alist-get 'status response)))
                     (message "Successfully indexed: %s (Status: %s)" entry-id_str status)))
           :else (lambda (err)
@@ -119,7 +119,7 @@ Wraps processing in error handling to prevent queue stalls."
                 :as #'json-read
                 :timeout elfeed-summary-db-index-timeout  ; Configurable timeout
                 :then (lambda (response)
-                        (message "Indexed %s, status %s" (alist-get 'entry-id response) (alist-get 'status response))
+                        (message "Indexed %s, status %s" (alist-get 'entry_id response) (alist-get 'status response))
                         ;; Process next file in queue after this one completes
                         (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue))
                 :else (lambda (error)
@@ -189,7 +189,7 @@ Skips entries with no summary."
   (plz 'get (concat (elfeed-summary-db-server-url) "/api/entries")
     :as #'json-read
     :then (lambda (response)
-            (let* ((entry-ids (alist-get 'entry-id response))
+            (let* ((entry-ids (alist-get 'entry_id response))
                    (count (length entries))
                    (missing-entry-ids nil)
                    (existing-entry-ids nil)
