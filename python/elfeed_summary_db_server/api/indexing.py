@@ -1,4 +1,5 @@
 """Indexing API endpoints."""
+import gc
 import logging
 import os
 from typing import Any, Dict
@@ -100,13 +101,17 @@ async def index_entry(request: IndexEntryRequest):
         cursor.execute("DELETE FROM entries WHERE entry_id = ?", (request.entry_id, ))
 
         # Generate chunks from full elfeed entry content for semantic search
-        if request.content:
+        if request.content or request.summary:
             log_memory_usage("before chunking elfeed content")
+
+            rtitle = request.title or ''
+            rsummary = request.summary or ''
+            rcontent = request.content or ''
 
             # Chunk the full summary with proper line tracking
             # Use configurable method and size (default: fixed chunks to reduce bloat)
             all_chunks = chunk_text(
-                request.title + request.summary + request.content,
+                rtitle + rcontent + rsummary,
                 method=settings.elfeed_chunk_method,
                 chunk_size=settings.elfeed_chunk_size,
                 chunk_overlap=settings.elfeed_chunk_overlap)
@@ -125,9 +130,9 @@ async def index_entry(request: IndexEntryRequest):
                 # Store chunks and embeddings (semantic DB uses filename not file_id)
                 db.store_chunks(
                     entry_id = request.entry_id,
-                    title=request.title,
-                    summary=request.summary,
-                    content=request.content,
+                    title=rtitle,
+                    summary=rsummary,
+                    content=rcontent,
                     md5=request.md5,
                     chunks=all_chunks,
                     embeddings=embeddings,
@@ -139,7 +144,6 @@ async def index_entry(request: IndexEntryRequest):
         log_memory_usage("after commit, indexing complete")
 
         # Final garbage collection to free memory for next request
-        import gc
         gc.collect()
 
         return IndexEntryResponse(entry_id=request.entry_id, status="indexed")
