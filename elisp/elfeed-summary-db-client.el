@@ -113,7 +113,7 @@ Wraps processing in error handling to prevent queue stalls."
                 ;; Continue with next file in queue
                 (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue))
             (let ((json-data (elfeed-summary-db-parse-entry-to-json entry)))
-              (plz 'post (concat (elfeed-summary-db-server-url) "/api/file")
+              (plz 'post (concat (elfeed-summary-db-server-url) "/api/entry")
                 :headers '(("Content-Type" . "application/json"))
                 :body json-data
                 :as #'json-read

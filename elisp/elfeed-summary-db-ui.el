@@ -122,14 +122,7 @@ Returns plist with :filename_pattern and/or :keyword."
 (defun elfeed-summary-db-index-all-entries ()
   "Index all entries in the Elfeed database."
   (interactive)
-
-  (let ((count 0))
-    (maphash
-     (lambda (_id entry)
-       (setq count (1+ count))
-       (elfeed-summary-db-index-entry-async entry))
-     elfeed-db-entries)
-    (message "Indexing %d entries..." count)))
+  (elfeed-summary-db-index-elfeed))
 
 
 ;;;###autoload
