@@ -90,7 +90,7 @@ Waits for each request to complete before processing the next entry."
                  elfeed-summary-db-index-total
                  (if (= elfeed-summary-db-index-total 1) "" "s")
                  (length elfeed-summary-db-index-failed-entries))
-      (message "Indexing complete: %d file%s processed"
+      (message "Indexing complete: %d entries %s processed"
                elfeed-summary-db-index-total
                (if (= elfeed-summary-db-index-total 1) "" "s")))))
 
@@ -123,7 +123,7 @@ Wraps processing in error handling to prevent queue stalls."
                         ;; Process next file in queue after this one completes
                         (run-with-timer elfeed-summary-db-index-delay nil #'elfeed-summary-db-process-index-queue))
                 :else (lambda (error)
-                        ;; Track failed files
+                        ;; Track failed entries
                         (push entry elfeed-summary-db-index-failed-entries)
                         ;; Check if it's a timeout
                         (if (and (listp error) (eq (car error) 28))
@@ -224,7 +224,7 @@ Skips entries with no summary."
                                                (if (= (length entry-ids-with-no-summary) 1) "y" "ies"))
                                      ""))))
                   (when (yes-or-no-p msg)
-                    ;; Delete missing files from database immediately
+                    ;; Delete missing entries from database immediately
                     (when missing-entry-ids
                       (message "Removing %d missing entr%s from database..."
                                (length missing-entry-ids)
@@ -232,7 +232,7 @@ Skips entries with no summary."
                       (dolist (entry-id missing-entry-ids)
                         (elfeed-summary-db-delete-entry-async entry-id)))
 
-                    ;; Remove remote files from database
+                    ;; Remove remote entries from database
                     (when entry-ids-with-no-summary
                       (message "Removing %d remote entr%s from database..."
                                (length entry-ids-with-no-summary)
@@ -251,7 +251,7 @@ Skips entries with no summary."
                       (setq elfeed-summary-db-index-queue existing-entry-ids
                             elfeed-summary-db-index-total (length existing-entry-ids)
                             elfeed-summary-db-index-processed 0
-                            elfeed-summary-db-index-failed-entries nil)  ; Reset failed files list
+                            elfeed-summary-db-index-failed-entries nil)  ; Reset failed entries list
 
                       ;; Start processing first file (continuation handled in callback)
                       (setq elfeed-summary-db-index-timer t)  ; Marker that indexing is active
@@ -281,7 +281,7 @@ Skips entries with no summary."
   (if elfeed-summary-db-index-timer
       (progn
         (setq elfeed-summary-db-index-timer nil)
-        (message "Indexing cancelled: %d of %d files processed"
+        (message "Indexing cancelled: %d of %d entries processed"
                  elfeed-summary-db-index-processed
                  elfeed-summary-db-index-total)
         (setq elfeed-summary-db-index-queue nil
@@ -308,7 +308,7 @@ If indexing has stalled, this will restart processing the remaining queue."
 
    ;; Valid queue exists, resume processing
    (t
-    (message "Resuming indexing: %d files remaining (processed %d of %d)"
+    (message "Resuming indexing: %d entries remaining (processed %d of %d)"
              (length elfeed-summary-db-index-queue)
              elfeed-summary-db-index-processed
              elfeed-summary-db-index-total)
